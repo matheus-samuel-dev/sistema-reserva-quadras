@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:playspace-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+app:
+  jwt:
+    secret: playspace-test-secret-key-with-at-least-256-bits-demo
+    expiration-minutes: 120

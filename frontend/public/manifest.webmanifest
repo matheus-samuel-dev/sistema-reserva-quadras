@@ -1,0 +1,21 @@
+{
+  "name": "PlaySpace - Reservas de Quadras",
+  "short_name": "PlaySpace",
+  "description": "SaaS premium para reservas de quadras, pagamentos, agenda e comunidade esportiva.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070b10",
+  "theme_color": "#7cff4f",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
