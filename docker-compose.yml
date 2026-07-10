@@ -41,8 +41,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-playspace-production-change-me-secret-with-at-least-256-bits}
       JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-720}
 
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://reservadequadras.duckdns.org}
-
+      CORS_ALLOWED_ORIGINS: "https://playspace.15-228-45-207.sslip.io"
+      
     ports:
       - "127.0.0.1:28080:8080"
 
