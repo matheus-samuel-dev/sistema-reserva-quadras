@@ -1,8 +1,19 @@
-import { useState } from 'react';
+import { CalendarClock, CheckCircle2, CreditCard, Users, WalletCards } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useAppData } from '../contexts/AppDataContext';
 import type { PaymentMethod, ReservationFormInput, User } from '../lib/types';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const activeStatuses = ['Pendente', 'Confirmada', 'Em andamento'];
+const paymentMethods: PaymentMethod[] = ['PIX', 'Cartão de Crédito', 'Cartão de Débito'];
+
+const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const minutesBetween = (start: string, end: string) => {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return eh * 60 + em - (sh * 60 + sm);
+};
 
 export function ReservationForm({ actor, onCreated }: { actor: User; onCreated: (reservationId: string) => void }) {
   const { state, createReservation } = useAppData();
@@ -18,68 +29,147 @@ export function ReservationForm({ actor, onCreated }: { actor: User; onCreated: 
     notes: ''
   });
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const selectedCourt = state.courts.find((court) => court.id === form.courtId);
+  const durationMinutes = minutesBetween(form.startTime, form.endTime);
+  const totalValue = selectedCourt && durationMinutes > 0 ? (selectedCourt.pricePerHour * durationMinutes) / 60 : 0;
+
+  const conflict = useMemo(
+    () =>
+      state.reservations.find((reservation) => {
+        if (reservation.courtId !== form.courtId || reservation.date !== form.date || !activeStatuses.includes(reservation.status)) return false;
+        return form.startTime < reservation.endTime && form.endTime > reservation.startTime;
+      }),
+    [form.courtId, form.date, form.endTime, form.startTime, state.reservations]
+  );
+
+  const validation = useMemo(() => {
+    const messages: string[] = [];
+    if (!form.courtId) messages.push('Selecione uma quadra disponível.');
+    if (!form.clientId) messages.push('Selecione um cliente para a reserva.');
+    if (durationMinutes <= 0) messages.push('O horário final deve ser maior que o inicial.');
+    if (form.startTime < '08:00' || form.endTime > '22:00') messages.push('Reservas permitidas apenas entre 08:00 e 22:00.');
+    if (new Date(`${form.date}T${form.startTime}:00`).getTime() < Date.now()) messages.push('Escolha um horário futuro.');
+    if (selectedCourt && form.players > selectedCourt.playerCapacity) messages.push(`Capacidade máxima: ${selectedCourt.playerCapacity} jogadores.`);
+    if (conflict) messages.push(`Conflito com ${conflict.code} (${conflict.startTime} - ${conflict.endTime}).`);
+    return messages;
+  }, [conflict, durationMinutes, form.clientId, form.courtId, form.date, form.endTime, form.players, form.startTime, selectedCourt]);
 
   const update = (key: keyof ReservationFormInput, value: string | number) => {
+    setError('');
     setForm((current) => ({ ...current, [key]: value }));
   };
 
   return (
     <form
-      className="grid gap-4 md:grid-cols-2"
+      className="grid gap-5"
       onSubmit={(event) => {
         event.preventDefault();
-        try {
-          const created = createReservation(form, actor);
-          onCreated(created.id);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Não foi possível criar a reserva.');
+        if (validation.length > 0) {
+          setError(validation[0]);
+          return;
         }
+        setSubmitting(true);
+        window.setTimeout(() => {
+          try {
+            const created = createReservation(form, actor);
+            onCreated(created.id);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Não foi possível criar a reserva.');
+          } finally {
+            setSubmitting(false);
+          }
+        }, 250);
       }}
     >
-      {actor.role === 'ADMIN' && (
+      <div className="grid gap-4 md:grid-cols-2">
+        {actor.role === 'ADMIN' && (
+          <label className="grid gap-2 text-sm font-semibold">
+            Cliente
+            <select className="form-control" value={form.clientId} onChange={(event) => update('clientId', event.target.value)}>
+              {state.users.filter((user) => user.role === 'CLIENTE').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+          </label>
+        )}
         <label className="grid gap-2 text-sm font-semibold">
-          Cliente
-          <select className="rounded-lg border border-line bg-white/5 p-3" value={form.clientId} onChange={(event) => update('clientId', event.target.value)}>
-            {state.users.filter((user) => user.role === 'CLIENTE').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+          Quadra
+          <select className="form-control" value={form.courtId} onChange={(event) => update('courtId', event.target.value)} aria-invalid={!form.courtId}>
+            {availableCourts.map((court) => <option key={court.id} value={court.id}>{court.name} - {court.modality}</option>)}
           </select>
         </label>
-      )}
+        <label className="grid gap-2 text-sm font-semibold">
+          Data
+          <input className="form-control" type="date" min={todayIso()} value={form.date} onChange={(event) => update('date', event.target.value)} />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          Início
+          <input className="form-control" type="time" min="08:00" max="22:00" step="3600" value={form.startTime} onChange={(event) => update('startTime', event.target.value)} />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          Fim
+          <input className="form-control" type="time" min="08:00" max="22:00" step="3600" value={form.endTime} onChange={(event) => update('endTime', event.target.value)} />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          Jogadores
+          <input className="form-control" type="number" min={1} max={selectedCourt?.playerCapacity} value={form.players} onChange={(event) => update('players', Number(event.target.value))} />
+        </label>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        {paymentMethods.map((method) => (
+          <button
+            key={method}
+            type="button"
+            className={`flex items-center gap-3 rounded-lg border p-3 text-left transition ${form.paymentMethod === method ? 'border-neon bg-neon/10' : 'border-line bg-white/[0.03] hover:border-neon/30'}`}
+            onClick={() => update('paymentMethod', method)}
+          >
+            <CreditCard className={method === 'PIX' ? 'h-5 w-5 text-neon' : 'h-5 w-5 text-cyan'} aria-hidden="true" />
+            <span>
+              <strong className="block text-sm">{method}</strong>
+              <span className="text-xs text-muted">{method === 'PIX' ? 'Aprovação imediata' : 'Confirmação demo'}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
       <label className="grid gap-2 text-sm font-semibold">
-        Quadra
-        <select className="rounded-lg border border-line bg-white/5 p-3" value={form.courtId} onChange={(event) => update('courtId', event.target.value)}>
-          {availableCourts.map((court) => <option key={court.id} value={court.id}>{court.name} - {court.modality}</option>)}
-        </select>
-      </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        Data
-        <input className="rounded-lg border border-line bg-white/5 p-3" type="date" min={todayIso()} value={form.date} onChange={(event) => update('date', event.target.value)} />
-      </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        Início
-        <input className="rounded-lg border border-line bg-white/5 p-3" type="time" min="08:00" max="22:00" step="3600" value={form.startTime} onChange={(event) => update('startTime', event.target.value)} />
-      </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        Fim
-        <input className="rounded-lg border border-line bg-white/5 p-3" type="time" min="08:00" max="22:00" step="3600" value={form.endTime} onChange={(event) => update('endTime', event.target.value)} />
-      </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        Jogadores
-        <input className="rounded-lg border border-line bg-white/5 p-3" type="number" min={1} value={form.players} onChange={(event) => update('players', Number(event.target.value))} />
-      </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        Pagamento
-        <select className="rounded-lg border border-line bg-white/5 p-3" value={form.paymentMethod} onChange={(event) => update('paymentMethod', event.target.value as PaymentMethod)}>
-          <option>PIX</option>
-          <option>Cartão de Crédito</option>
-          <option>Cartão de Débito</option>
-        </select>
-      </label>
-      <label className="grid gap-2 text-sm font-semibold md:col-span-2">
         Observações
-        <textarea className="min-h-24 rounded-lg border border-line bg-white/5 p-3" value={form.notes} onChange={(event) => update('notes', event.target.value)} />
+        <textarea className="form-control min-h-24" value={form.notes} onChange={(event) => update('notes', event.target.value)} placeholder="Ex.: reserva para treino, evento ou observação operacional" />
       </label>
-      {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200 md:col-span-2">{error}</p>}
-      <button className="neon-button rounded-lg px-5 py-3 font-black md:col-span-2" type="submit">Criar reserva</button>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="app-card p-4">
+          <CalendarClock className="h-5 w-5 text-neon" aria-hidden="true" />
+          <p className="mt-3 text-xs text-muted">Duração</p>
+          <strong className="metric-value">{durationMinutes > 0 ? `${durationMinutes / 60}h` : '-'}</strong>
+        </div>
+        <div className="app-card p-4">
+          <Users className="h-5 w-5 text-cyan" aria-hidden="true" />
+          <p className="mt-3 text-xs text-muted">Capacidade</p>
+          <strong className="metric-value">{selectedCourt ? `${form.players}/${selectedCourt.playerCapacity}` : '-'}</strong>
+        </div>
+        <div className="app-card p-4">
+          <WalletCards className="h-5 w-5 text-amber" aria-hidden="true" />
+          <p className="mt-3 text-xs text-muted">Total instantâneo</p>
+          <strong className="metric-value text-neon">{currency(totalValue)}</strong>
+        </div>
+      </div>
+
+      {validation.length === 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-neon/30 bg-neon/10 p-3 text-sm text-neon">
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          Horário disponível. A reserva será criada como pendente até o pagamento.
+        </div>
+      )}
+      {(error || validation.length > 0) && (
+        <div className="rounded-lg border border-amber/30 bg-amber/10 p-3 text-sm text-amber">
+          {error || validation[0]}
+        </div>
+      )}
+      <button className="neon-button rounded-lg px-5 py-3 font-black disabled:opacity-60" disabled={submitting || validation.length > 0} type="submit">
+        {submitting ? 'Criando reserva...' : 'Criar reserva'}
+      </button>
     </form>
   );
 }

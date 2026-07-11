@@ -11,10 +11,12 @@ export function LoginPage() {
   const [email, setEmail] = useState('admin@playspace.com');
   const [password, setPassword] = useState('Admin@123');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    setSubmitting(true);
     try {
       const user = await login(email, password);
       const fallback = user.role === 'ADMIN' ? '/admin' : '/app';
@@ -22,6 +24,8 @@ export function LoginPage() {
       navigate(from ?? fallback, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível entrar.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -39,11 +43,11 @@ export function LoginPage() {
           <h1 className="mt-16 text-4xl font-black leading-tight">Entre no PlaySpace e gerencie toda a arena.</h1>
           <p className="mt-4 text-muted">JWT demo persistido, rotas protegidas por perfil e experiência completa para admin e cliente.</p>
           <div className="mt-10 grid gap-3 text-sm">
-            <button className="rounded-lg border border-neon/30 bg-neon/10 p-4 text-left" onClick={() => { setEmail('admin@playspace.com'); setPassword('Admin@123'); }}>
+            <button className="app-card p-4 text-left" type="button" onClick={() => { setEmail('admin@playspace.com'); setPassword('Admin@123'); }}>
               <strong className="block text-neon">Admin</strong>
               admin@playspace.com · Admin@123
             </button>
-            <button className="rounded-lg border border-cyan/30 bg-cyan/10 p-4 text-left" onClick={() => { setEmail('cliente@playspace.com'); setPassword('Cliente@123'); }}>
+            <button className="app-card p-4 text-left" type="button" onClick={() => { setEmail('cliente@playspace.com'); setPassword('Cliente@123'); }}>
               <strong className="block text-cyan">Cliente</strong>
               cliente@playspace.com · Cliente@123
             </button>
@@ -61,18 +65,18 @@ export function LoginPage() {
             E-mail
             <span className="relative">
               <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input className="w-full rounded-lg border border-line bg-white/5 py-3 pl-10 pr-3" value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
+              <input className="form-control py-3 pl-10 pr-3" value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
             </span>
           </label>
           <label className="mt-4 grid gap-2 text-sm font-semibold">
             Senha
             <span className="relative">
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input className="w-full rounded-lg border border-line bg-white/5 py-3 pl-10 pr-3" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
+              <input className="form-control py-3 pl-10 pr-3" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
             </span>
           </label>
           {error && <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">{error}</p>}
-          <button className="neon-button mt-6 w-full rounded-lg px-5 py-3 font-black" type="submit">Entrar</button>
+          <button className="neon-button mt-6 w-full rounded-lg px-5 py-3 font-black disabled:opacity-70" type="submit" disabled={submitting}>{submitting ? 'Entrando...' : 'Entrar'}</button>
           <div className="mt-4 grid gap-2 text-sm md:hidden">
             <button className="ghost-button rounded-lg px-3 py-2" type="button" onClick={() => { setEmail('admin@playspace.com'); setPassword('Admin@123'); }}>Usar Admin</button>
             <button className="ghost-button rounded-lg px-3 py-2" type="button" onClick={() => { setEmail('cliente@playspace.com'); setPassword('Cliente@123'); }}>Usar Cliente</button>

@@ -1,7 +1,6 @@
 import {
   Activity,
   BarChart3,
-  Bell,
   CalendarDays,
   CreditCard,
   Gauge,
@@ -20,10 +19,11 @@ import {
   Volleyball,
   WalletCards
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { NotificationBell } from '../components/NotificationBell';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAppData } from '../contexts/AppDataContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -61,7 +61,15 @@ export function AppShell() {
   const { state, toggleTheme, finishTour } = useAppData();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [pageLoading, setPageLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    setPageLoading(true);
+    const timer = window.setTimeout(() => setPageLoading(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname]);
 
   if (!user) return null;
   const nav = user.role === 'ADMIN' ? adminNav : clientNav;
@@ -71,9 +79,17 @@ export function AppShell() {
     if (!query.trim()) return [];
     const normalized = query.toLowerCase();
     return [
-      ...state.courts.filter((court) => court.name.toLowerCase().includes(normalized) || court.modality.toLowerCase().includes(normalized)).map((court) => ({ label: court.name, detail: court.modality, to: user.role === 'ADMIN' ? '/admin/quadras' : '/app/quadras' })),
-      ...state.reservations.filter((reservation) => reservation.code.toLowerCase().includes(normalized) || reservation.clientName.toLowerCase().includes(normalized)).slice(0, 5).map((reservation) => ({ label: reservation.code, detail: `${reservation.courtName} · ${reservation.status}`, to: user.role === 'ADMIN' ? '/admin/reservas' : '/app/reservas' })),
-      ...state.users.filter((candidate) => candidate.name.toLowerCase().includes(normalized)).slice(0, 3).map((candidate) => ({ label: candidate.name, detail: candidate.role, to: user.role === 'ADMIN' ? '/admin/usuarios' : '/app/ranking' }))
+      ...state.courts
+        .filter((court) => court.name.toLowerCase().includes(normalized) || court.modality.toLowerCase().includes(normalized))
+        .map((court) => ({ label: court.name, detail: court.modality, to: user.role === 'ADMIN' ? '/admin/quadras' : '/app/quadras' })),
+      ...state.reservations
+        .filter((reservation) => reservation.code.toLowerCase().includes(normalized) || reservation.clientName.toLowerCase().includes(normalized))
+        .slice(0, 5)
+        .map((reservation) => ({ label: reservation.code, detail: `${reservation.courtName} · ${reservation.status}`, to: user.role === 'ADMIN' ? '/admin/reservas' : '/app/reservas' })),
+      ...state.users
+        .filter((candidate) => candidate.name.toLowerCase().includes(normalized))
+        .slice(0, 3)
+        .map((candidate) => ({ label: candidate.name, detail: candidate.role, to: user.role === 'ADMIN' ? '/admin/usuarios' : '/app/ranking' }))
     ].slice(0, 8);
   }, [query, state.courts, state.reservations, state.users, user.role]);
 
@@ -135,13 +151,13 @@ export function AppShell() {
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
               <input
-                className="w-full rounded-lg border border-line bg-white/[0.04] py-2 pl-10 pr-3 text-sm"
+                className="form-control py-2 pl-10 pr-3 text-sm"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar quadras, reservas, usuários..."
               />
               {results.length > 0 && (
-                <div className="glass-panel absolute left-0 right-0 top-12 z-40 rounded-lg p-2">
+                <div className="glass-panel animate-enter absolute left-0 right-0 top-12 z-40 rounded-lg p-2">
                   {results.map((item) => (
                     <button
                       key={`${item.label}-${item.detail}`}
@@ -170,7 +186,7 @@ export function AppShell() {
 
         <main className="px-4 py-6 pb-24 md:px-6 lg:pb-8">
           {!state.preferences.tourDone && (
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neon/30 bg-neon/10 p-4">
+            <div className="animate-enter mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neon/30 bg-neon/10 p-4">
               <div>
                 <p className="font-black">Tour PlaySpace</p>
                 <p className="text-sm text-muted">Use a busca global, acesse notificações inteligentes e teste o fluxo de reserva com pagamento demo.</p>
@@ -178,7 +194,16 @@ export function AppShell() {
               <button className="neon-button rounded-lg px-4 py-2 text-sm font-bold" onClick={finishTour}>Começar</button>
             </div>
           )}
-          <Outlet />
+          <div className="relative">
+            {pageLoading && (
+              <div className="absolute inset-0 z-10 bg-[var(--bg)]">
+                <PageSkeleton />
+              </div>
+            )}
+            <div className={`${pageLoading ? 'opacity-0' : 'animate-enter opacity-100'} transition-opacity duration-200`}>
+              <Outlet />
+            </div>
+          </div>
         </main>
       </div>
 
