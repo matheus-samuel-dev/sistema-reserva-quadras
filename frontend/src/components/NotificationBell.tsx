@@ -1,6 +1,6 @@
 import { Bell, CalendarCheck, CheckCheck, CreditCard, Sparkles, Trash2, Volleyball } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useAppData } from '../contexts/AppDataContext';
 import type { User } from '../lib/types';
 
@@ -26,17 +26,42 @@ const relativeTime = (iso: string) => {
 export function NotificationBell({ user }: { user: User }) {
   const { state, markNotificationRead, clearNotifications } = useAppData();
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panelId = `notifications-${useId().replace(/:/g, '')}`;
   const list = state.notifications[user.id] ?? [];
   const unread = list.filter((item) => !item.read).length;
 
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideInteraction = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideInteraction);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideInteraction);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
-      <button className="ghost-button relative rounded-lg p-2" onClick={() => setOpen((value) => !value)} aria-label="Notificações">
+    <div className="relative" ref={containerRef}>
+      <button
+        className="ghost-button relative rounded-lg p-2"
+        onClick={() => setOpen((value) => !value)}
+        aria-label={unread > 0 ? `Notificações, ${unread} não lidas` : 'Notificações, nenhuma não lida'}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-haspopup="true"
+      >
         <Bell className="h-5 w-5" aria-hidden="true" />
-        {unread > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unread}</span>}
+        {unread > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unread}</span>}
       </button>
       {open && (
-        <div className="glass-panel animate-enter absolute right-0 top-12 z-40 w-[min(92vw,420px)] rounded-lg p-3">
+        <div id={panelId} role="region" aria-label="Central de notificações" className="glass-panel animate-enter absolute right-0 top-12 z-40 w-[min(92vw,420px)] rounded-lg p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <strong>Notificações</strong>

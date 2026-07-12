@@ -8,9 +8,14 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/playspace}
     username: ${SPRING_DATASOURCE_USERNAME:playspace}
     password: ${SPRING_DATASOURCE_PASSWORD:playspace}
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+    clean-disabled: true
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
@@ -25,7 +30,7 @@ springdoc:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:playspace-demo-secret-key-with-at-least-256-bits-for-hmac}
-    expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
+    secret: ${JWT_SECRET}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

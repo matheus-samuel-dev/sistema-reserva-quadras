@@ -8,10 +8,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 @Entity
@@ -21,7 +24,8 @@ public class Court extends AuditableEntity {
     private Long id;
 
     @NotBlank
-    @Column(nullable = false)
+    @Size(max = 255)
+    @Column(nullable = false, length = 255)
     private String name;
 
     @Enumerated(EnumType.STRING)
@@ -29,6 +33,7 @@ public class Court extends AuditableEntity {
     @Column(nullable = false)
     private Modality modality;
 
+    @Size(max = 1200)
     @Column(length = 1200)
     private String description;
 
@@ -40,13 +45,21 @@ public class Court extends AuditableEntity {
     private int playerCapacity;
 
     @Enumerated(EnumType.STRING)
+    @NotNull
     @Column(nullable = false)
     private CourtStatus status = CourtStatus.DISPONIVEL;
 
+    @Size(max = 255)
+    @Column(length = 255)
     private String imageUrl;
+
+    @Size(max = 255)
+    @Column(length = 255)
     private String location;
     private boolean lighting;
     private boolean covered;
+    @DecimalMin("0.0")
+    @DecimalMax("5.0")
     private double rating;
 
     public Long getId() {

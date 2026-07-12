@@ -22,9 +22,12 @@ import {
 } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
+import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CourtImage } from '../../components/CourtImage';
 import { EmptyState } from '../../components/EmptyState';
+import { IconField } from '../../components/IconField';
 import { Modal } from '../../components/Modal';
 import { PaymentFlow } from '../../components/PaymentFlow';
 import { ReservationForm } from '../../components/ReservationForm';
@@ -34,11 +37,12 @@ import { Toast } from '../../components/Toast';
 import { WeeklyCalendar } from '../../components/WeeklyCalendar';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Modality, PartnerAd, Reservation } from '../../lib/types';
+import type { Modality, PartnerAd, Reservation, ReservationFormInput } from '../../lib/types';
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const chartColors = ['#7CFF4F', '#55D6FF', '#8B5CF6', '#FFB84D', '#FB7185'];
-const chartTooltip = { background: '#0b1117', border: '1px solid rgba(148,163,184,.2)', borderRadius: 8 };
+const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
+const chartColors = ['var(--primary)', 'var(--info)', '#8B5CF6', 'var(--warning)', 'var(--danger)'];
+const chartTooltip = { background: 'var(--tooltip-bg)', color: 'var(--tooltip-text)', border: '1px solid var(--border-strong)', borderRadius: 10, boxShadow: 'var(--shadow-panel)' };
 const iconMap = { Medal, Volleyball, Flame, Zap, Gem, Moon, Trophy, Award };
 
 function ClientHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
@@ -99,7 +103,9 @@ export function ClientHomePage() {
   const { state } = useAppData();
   const navigate = useNavigate();
   const myReservations = state.reservations.filter((reservation) => reservation.clientId === user?.id);
-  const upcoming = myReservations.filter((reservation) => reservation.date >= new Date().toISOString().slice(0, 10) && reservation.status !== 'Cancelada');
+  const now = new Date();
+  const nowKey = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
+  const upcoming = myReservations.filter((reservation) => `${reservation.date} ${reservation.endTime}` > nowKey && reservation.status !== 'Cancelada').sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
   const achievements = state.achievements[user?.id ?? ''] ?? [];
 
   return (
@@ -108,9 +114,9 @@ export function ClientHomePage() {
       <section className="glass-panel mb-4 overflow-hidden rounded-lg p-5">
         <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
           <div>
-            <p className="text-sm font-bold text-neon">Clima do dia</p>
+            <div className="flex items-center gap-3"><p className="text-sm font-bold text-neon">Clima do dia</p><StatusBadge status="Demonstração" compact /></div>
             <h2 className="mt-2 text-4xl font-black">27°C · Ideal para Beach Tennis</h2>
-            <p className="mt-3 text-muted">Se chover no fim do dia, prefira as quadras cobertas Studio Tênis ou Arena Summit.</p>
+            <p className="mt-3 text-muted">Condição simulada para São Paulo. Se chover, prefira Studio Tênis ou Arena Summit.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="app-card p-4">
@@ -149,7 +155,7 @@ export function ClientHomePage() {
                     <Icon className="h-5 w-5 text-neon" />
                     <div className="flex-1">
                       <p className="font-bold">{achievement.title}</p>
-                      <div className="mt-2 h-2 rounded-full bg-white/10"><div className="h-full rounded-full bg-neon transition-all" style={{ width: `${achievement.percent}%` }} /></div>
+                      <div className="mt-2 h-2 rounded-full bg-[var(--surface-2)]"><div className="h-full rounded-full bg-neon transition-all" style={{ width: `${achievement.percent}%` }} /></div>
                     </div>
                     <span className="text-sm font-bold text-neon">{achievement.percent}%</span>
                   </div>
@@ -178,10 +184,10 @@ export function ClientReservationsPage() {
     .filter((reservation) => reservation.clientId === user?.id)
     .filter((reservation) => tab === 'Próximas' ? reservation.date >= today && reservation.status !== 'Cancelada' : reservation.date < today || ['Cancelada', 'Concluída'].includes(reservation.status));
 
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
     if (!canceling || !user) return;
     try {
-      cancelReservation(canceling.id, user);
+      await cancelReservation(canceling.id, user);
       setToastTone('success');
       setToast('Reserva cancelada com sucesso.');
     } catch (err) {
@@ -196,7 +202,7 @@ export function ClientReservationsPage() {
     <>
       <ClientHeader title="Minhas reservas" subtitle="Acompanhe próximas partidas, histórico, pagamento e cancelamento." />
       <div className="mb-4 inline-flex rounded-lg border border-line bg-white/[0.03] p-1">
-        {(['Próximas', 'Histórico'] as const).map((item) => <button key={item} className={`rounded-md px-4 py-2 text-sm font-bold transition ${tab === item ? 'bg-neon text-[#07110c]' : 'text-muted hover:text-[var(--text)]'}`} onClick={() => setTab(item)}>{item}</button>)}
+        {(['Próximas', 'Histórico'] as const).map((item) => <button key={item} className={`min-h-11 rounded-md px-4 py-2 text-sm font-bold transition ${tab === item ? 'bg-neon text-[#07110c]' : 'text-muted hover:text-[var(--text)]'}`} onClick={() => setTab(item)}>{item}</button>)}
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {list.map((reservation) => (
@@ -248,20 +254,17 @@ export function ClientCourtsPage() {
   return (
     <>
       <ClientHeader title="Ver quadras" subtitle="Explore quadras, favoritos, preços, avaliações e disponibilidade." />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <label className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input className="form-control py-3 pl-10 pr-3" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por quadra, setor ou modalidade" />
-        </label>
-        <label className="ghost-button flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold">
-          <input type="checkbox" checked={availableOnly} onChange={(event) => setAvailableOnly(event.target.checked)} />
+      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <IconField label="Buscar quadras" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Quadra, setor ou modalidade" />
+        <label className="ghost-button flex min-h-12 items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold">
+          <input type="checkbox" checked={availableOnly} onChange={(event) => setAvailableOnly(event.target.checked)} aria-label="Mostrar apenas quadras disponíveis" />
           Disponíveis
         </label>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((court) => (
           <article key={court.id} className="glass-panel card-hover overflow-hidden rounded-lg">
-            <div className="h-32" style={{ background: court.image }} />
+            <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} className="aspect-[16/8] border-b border-line" />
             <div className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -287,16 +290,22 @@ export function ClientCourtsPage() {
 }
 
 export function ClientAgendaPage() {
-  const { state } = useAppData();
+  const { state, dataSource, ensureAvailabilityRange } = useAppData();
   const [selected, setSelected] = useState<Reservation | null>(null);
   const [creating, setCreating] = useState(false);
+  const [reservationDraft, setReservationDraft] = useState<Partial<ReservationFormInput>>({});
+  const [courtFilter, setCourtFilter] = useState('Todas');
+  const [modalityFilter, setModalityFilter] = useState<Modality | 'Todas'>('Todas');
+  const [toast, setToast] = useState('');
   const { user } = useAuth();
+  const agendaReservations = state.reservations.map((reservation) => reservation.clientId === user?.id ? reservation : { ...reservation, code: 'Horário ocupado', clientName: 'Reservado', notes: undefined, totalValue: 0, players: 0, history: ['Horário indisponível'] });
   return (
     <>
-      <ClientHeader title="Agenda" subtitle="Veja horários da semana e encontre janelas livres." />
-      <WeeklyCalendar reservations={state.reservations} onReservationClick={setSelected} onNewReservation={() => setCreating(true)} />
+      <ClientHeader title="Agenda" subtitle="Veja horários, filtre quadras e encontre janelas livres sem expor dados de outros jogadores." action={<div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold text-muted">Quadra<select className="form-control min-w-44 py-2 text-sm" value={courtFilter} onChange={(event) => setCourtFilter(event.target.value)}><option value="Todas">Todas as quadras</option>{state.courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-muted">Modalidade<select className="form-control min-w-44 py-2 text-sm" value={modalityFilter} onChange={(event) => setModalityFilter(event.target.value as Modality | 'Todas')}><option value="Todas">Todas as modalidades</option>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label></div>} />
+      <WeeklyCalendar reservations={agendaReservations} courtFilter={courtFilter} modalityFilter={modalityFilter} onReservationClick={(reservation) => reservation.clientId === user?.id ? setSelected(reservation) : setToast('Este horário já está ocupado. Os dados do outro jogador permanecem privados.')} onNewReservation={(initialValues) => { setReservationDraft(initialValues ?? {}); setCreating(true); }} onVisibleRangeChange={dataSource === 'api' ? ensureAvailabilityRange : undefined} />
       <Modal title="Reserva selecionada" open={Boolean(selected)} onClose={() => setSelected(null)}>{selected && <ReservationCard reservation={selected} />}</Modal>
-      <Modal title="Nova reserva" open={creating} onClose={() => setCreating(false)}>{user && <ReservationForm actor={user} onCreated={() => setCreating(false)} />}</Modal>
+      <Modal title="Nova reserva" open={creating} onClose={() => setCreating(false)}>{user && <ReservationForm actor={user} initialValues={reservationDraft} onCreated={() => { setCreating(false); setReservationDraft({}); }} />}</Modal>
+      <Toast message={toast} tone="info" onClose={() => setToast('')} />
     </>
   );
 }
@@ -310,10 +319,7 @@ export function ClientPaymentsPage() {
   return (
     <>
       <ClientHeader title="Pagamentos" subtitle="Histórico de pagamentos PIX e cartões em modo demo." />
-      <label className="relative mb-4 block">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <input className="form-control py-2 pl-10 pr-3" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pagamentos" />
-      </label>
+      <IconField wrapperClassName="mb-4" label="Buscar pagamentos" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Reserva, método ou transação" />
       <div className="grid gap-3">
         {filtered.map((payment) => (
           <div key={payment.id} className="glass-panel card-hover flex items-center justify-between gap-3 rounded-lg p-4">
@@ -342,7 +348,7 @@ export function ClientProfilePage() {
       <section className="glass-panel overflow-hidden rounded-lg">
         <div className="h-40 bg-[linear-gradient(135deg,rgba(124,255,79,.25),rgba(85,214,255,.12)),radial-gradient(circle_at_20%_40%,rgba(124,255,79,.22),transparent_20rem)]" />
         <div className="-mt-12 p-5">
-          <div className="grid h-24 w-24 place-items-center rounded-full border-4 border-[var(--bg)] bg-neon text-2xl font-black text-[#07110c]">{user.profile.photo}</div>
+          <Avatar name={user.name} src={user.profile.photo} size={96} className="border-4 border-[var(--bg)] text-2xl" />
           <h2 className="mt-4 text-3xl font-black">{user.name}</h2>
           <p className="text-muted">{user.profile.city} · membro desde {user.profile.memberSince}</p>
           <p className="mt-4 max-w-2xl text-muted">{user.profile.bio}</p>
@@ -364,16 +370,22 @@ export function ClientStatsPage() {
   const { user } = useAuth();
   const { state } = useAppData();
   const myReservations = state.reservations.filter((reservation) => reservation.clientId === user?.id);
-  const monthly = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'].map((month, index) => ({ month, reservas: [2, 3, 4, 5, 6, 7][index], gasto: [220, 340, 480, 520, 610, 740][index] }));
-  const byModality = user?.profile.sports.map((sport, index) => ({ name: sport, value: [55, 25, 20][index] ?? 10 })) ?? [];
+  const myReservationIds = new Set(myReservations.map((item) => item.id));
+  const monthly = Array.from({ length: 6 }, (_, reverseIndex) => {
+    const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - (5 - reverseIndex));
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return { month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''), reservas: myReservations.filter((item) => item.date.startsWith(key) && item.status !== 'Cancelada').length, gasto: state.payments.filter((payment) => myReservationIds.has(payment.reservationId) && payment.status === 'Aprovado' && (payment.paidAt ?? '').startsWith(key)).reduce((sum, payment) => sum + payment.amount, 0) };
+  });
+  const byModality = modalities.map((sport) => ({ name: sport, value: myReservations.filter((item) => item.modality === sport && item.status !== 'Cancelada').length })).filter((item) => item.value > 0);
+  const monthlySpend = monthly[monthly.length - 1]?.gasto ?? 0;
   return (
     <>
       <ClientHeader title="Estatísticas" subtitle="Evolução mensal, gasto, modalidades e frequência esportiva." />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Total de reservas" value={myReservations.length} icon={CalendarDays} tone="neon" />
         <StatCard title="Total de partidas" value={user?.profile.matchesPlayed ?? 0} icon={Volleyball} tone="cyan" />
-        <StatCard title="Gasto mensal" value="R$ 540" icon={CreditCard} tone="amber" />
-        <StatCard title="Sequência atual" value="6 jogos" icon={Flame} tone="neon" />
+        <StatCard title="Gasto mensal" value={currency(monthlySpend)} icon={CreditCard} tone="amber" />
+        <StatCard title="Sequência atual" value={`${Math.min(myReservations.filter((item) => item.status === 'Concluída').length, 6)} jogos`} icon={Flame} tone="neon" />
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <section className="glass-panel rounded-lg p-5">
@@ -381,12 +393,14 @@ export function ClientStatsPage() {
           <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthly}>
-                <CartesianGrid stroke="rgba(148,163,184,.12)" />
-                <XAxis dataKey="month" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip contentStyle={chartTooltip} />
-                <Line dataKey="reservas" stroke="#7CFF4F" strokeWidth={3} />
-                <Line dataKey="gasto" stroke="#55D6FF" strokeWidth={3} />
+                <CartesianGrid stroke="var(--line)" />
+                <XAxis dataKey="month" stroke="var(--muted)" />
+                <YAxis yAxisId="reservas" stroke="var(--primary)" allowDecimals={false} />
+                <YAxis yAxisId="gasto" orientation="right" stroke="var(--info)" tickFormatter={(value) => `R$ ${value}`} />
+                <RechartsTooltip contentStyle={chartTooltip} formatter={(value, name) => name === 'gasto' ? [currency(Number(value)), 'Gasto'] : [value, 'Reservas']} />
+                <Legend formatter={(value) => value === 'gasto' ? 'Gasto (R$)' : 'Reservas'} />
+                <Line yAxisId="reservas" dataKey="reservas" stroke="var(--primary)" strokeWidth={3} />
+                <Line yAxisId="gasto" dataKey="gasto" stroke="var(--info)" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -399,7 +413,7 @@ export function ClientStatsPage() {
                 <Pie data={byModality} dataKey="value" innerRadius={60} outerRadius={90}>
                   {byModality.map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
                 </Pie>
-                <Tooltip contentStyle={chartTooltip} />
+                <RechartsTooltip contentStyle={chartTooltip} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -410,7 +424,7 @@ export function ClientStatsPage() {
 }
 
 export function ClientCommunityPage() {
-  const { state, likePost } = useAppData();
+  const { state, likePost, commentPost } = useAppData();
   const [toast, setToast] = useState('');
   return (
     <>
@@ -418,10 +432,10 @@ export function ClientCommunityPage() {
       <div className="grid gap-3">
         {state.posts.map((post) => (
           <article key={post.id} className="glass-panel card-hover rounded-lg p-4">
-            <p><strong>{post.authorName}</strong> {post.content}</p>
+            <div className="flex items-start gap-3"><Avatar name={post.authorName} src={post.avatarUrl ?? state.users.find((item) => item.id === post.authorId)?.profile.photo} size={42} /><p><strong>{post.authorName}</strong> {post.content}</p></div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => likePost(post.id)}>Curtir · {post.likes}</button>
-              <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => setToast('Comentário demo registrado.')}>Comentar · {post.comments}</button>
+              <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => void likePost(post.id)}>Curtir · {post.likes}</button>
+              <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => { commentPost(post.id); setToast('Comentário demonstrativo adicionado.'); }}>Comentar · {post.comments}</button>
               <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => { navigator.clipboard?.writeText(post.content); setToast('Publicação copiada.'); }}>Compartilhar</button>
             </div>
           </article>
@@ -434,21 +448,23 @@ export function ClientCommunityPage() {
 
 export function ClientRankingPage() {
   const { state } = useAppData();
-  const ranking = [...state.users].filter((user) => user.role === 'CLIENTE').sort((a, b) => b.profile.hoursOnCourt - a.profile.hoursOnCourt);
+  const [period, setPeriod] = useState<'Semanal' | 'Mensal' | 'Anual'>('Mensal');
+  const ranking = [...state.ranking].sort((a, b) => b.hours - a.hours);
+  const divisor = period === 'Semanal' ? 52 : period === 'Mensal' ? 12 : 1;
   return (
     <>
       <ClientHeader title="Ranking da comunidade" subtitle="Filtros semanal, mensal e anual com reservas, horas e frequência." />
-      <div className="mb-4 flex gap-2">{['Semanal', 'Mensal', 'Anual'].map((item) => <button key={item} className="ghost-button rounded-lg px-4 py-2 text-sm font-bold">{item}</button>)}</div>
+      <div className="mb-4 flex flex-wrap gap-2">{(['Semanal', 'Mensal', 'Anual'] as const).map((item) => <button key={item} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-bold ${period === item ? 'border-neon bg-neon/10 text-neon' : 'border-line text-muted'}`} onClick={() => setPeriod(item)} aria-pressed={period === item}>{item}</button>)}</div>
       <div className="grid gap-3">
         {ranking.map((player, index) => (
-          <div key={player.id} className="glass-panel card-hover flex items-center gap-4 rounded-lg p-4">
+          <div key={player.id} className="glass-panel card-hover flex min-w-0 max-w-full items-center gap-3 rounded-lg p-4 sm:gap-4">
             <strong className="grid h-10 w-10 place-items-center rounded-full bg-neon/15 text-neon">#{index + 1}</strong>
-            <div className="grid h-11 w-11 place-items-center rounded-full bg-white/10 font-black">{player.profile.photo}</div>
+            <Avatar name={player.name} src={state.users.find((user) => user.id === player.id)?.profile.photo} size={44} />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-black">{player.name}</p>
-              <p className="truncate text-sm text-muted">{player.profile.favoriteModality} · {player.profile.attendanceRate}% comparecimento</p>
+              <p className="font-black leading-tight">{player.name}</p>
+              <p className="mt-0.5 text-xs leading-4 text-muted sm:text-sm sm:leading-5">{player.favoriteModality} · {player.attendanceRate}% comparecimento</p>
             </div>
-            <strong>{player.profile.hoursOnCourt}h</strong>
+            <strong className="ml-auto shrink-0 text-right">{(player.hours / divisor).toFixed(period === 'Anual' ? 0 : 1)}h <span className="block text-[10px] font-semibold text-muted">{period.toLowerCase()}</span></strong>
           </div>
         ))}
       </div>
@@ -462,36 +478,33 @@ export function ClientPartnersPage() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [query, setQuery] = useState('');
+  const [interested, setInterested] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState<Omit<PartnerAd, 'id'>>({ playerId: user?.id ?? '', playerName: user?.name ?? '', modality: user?.profile.favoriteModality ?? 'Beach Tennis', level: user?.profile.level ?? 'Intermediário', city: user?.profile.city ?? '', availability: 'Ter e Qui, 18:00 - 21:00', notes: '' });
   const filtered = state.partnerAds.filter((ad) => `${ad.playerName} ${ad.modality} ${ad.level} ${ad.city}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
-      <ClientHeader title="Encontrar parceiros" subtitle="Crie anúncios e encontre jogadores compatíveis por modalidade, nível e cidade." action={<button className="neon-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Criar anúncio</button>} />
-      <label className="relative mb-4 block">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <input className="form-control py-2 pl-10 pr-3" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por modalidade, cidade ou nível" />
-      </label>
+      <ClientHeader title="Encontrar parceiros" subtitle="Consulte jogadores por modalidade, nível e cidade e simule um anúncio nesta sessão." action={<button className="neon-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Simular anúncio</button>} />
+      <IconField wrapperClassName="mb-4" label="Buscar parceiros" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Modalidade, cidade ou nível" />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((ad) => (
           <article key={ad.id} className="glass-panel card-hover rounded-lg p-4">
-            <p className="font-black">{ad.playerName}</p>
+            <div className="flex items-center gap-3"><Avatar name={ad.playerName} src={ad.avatarUrl ?? state.users.find((item) => item.id === ad.playerId)?.profile.photo} size={42} /><p className="font-black">{ad.playerName}</p></div>
             <p className="text-sm text-muted">{ad.modality} · {ad.level} · {ad.city}</p>
             <p className="mt-3 text-sm">{ad.availability}</p>
             <p className="mt-2 min-h-10 text-sm text-muted">{ad.notes}</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button className="neon-button rounded-lg px-3 py-2 text-sm font-bold" onClick={() => setToast('Interesse enviado em modo demo.')}>Tenho interesse</button>
-              <button className="ghost-button rounded-lg px-3 py-2 text-sm font-bold" onClick={() => setToast('Mensagem demo preparada.')}>Enviar mensagem</button>
+              <button className="neon-button rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-60" disabled={interested.has(ad.id)} onClick={() => { setInterested((current) => new Set(current).add(ad.id)); setToast(`Solicitação demonstrativa enviada para ${ad.playerName}.`); }}>{interested.has(ad.id) ? 'Interesse enviado' : 'Tenho interesse'}</button>
             </div>
           </article>
         ))}
       </div>
-      {filtered.length === 0 && <EmptyState title="Nenhum parceiro encontrado" description="Ajuste a busca ou publique um anúncio para atrair jogadores." actionLabel="Criar anúncio" onAction={() => setOpen(true)} />}
-      <Modal title="Criar anúncio" open={open} onClose={() => setOpen(false)}>
-        <form className="grid gap-4" onSubmit={(event: FormEvent) => { event.preventDefault(); addPartnerAd(form); setOpen(false); setToast('Anúncio publicado.'); }}>
-          <select className="form-control" value={form.modality} onChange={(event) => setForm((current) => ({ ...current, modality: event.target.value as Modality }))}>{['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'].map((item) => <option key={item}>{item}</option>)}</select>
-          <input className="form-control" value={form.availability} onChange={(event) => setForm((current) => ({ ...current, availability: event.target.value }))} />
-          <textarea className="form-control min-h-24" placeholder="Observações" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
-          <button className="neon-button rounded-lg px-5 py-3 font-black">Publicar</button>
+      {filtered.length === 0 && <EmptyState title="Nenhum parceiro encontrado" description="Ajuste a busca ou simule um anúncio local para esta sessão." actionLabel="Simular anúncio" onAction={() => setOpen(true)} />}
+      <Modal title="Simular anúncio" open={open} onClose={() => setOpen(false)}>
+        <form className="grid gap-4" onSubmit={(event: FormEvent) => { event.preventDefault(); addPartnerAd(form); setOpen(false); setToast('Anúncio demonstrativo adicionado somente nesta sessão.'); }}>
+          <label className="grid gap-2 text-sm font-semibold">Modalidade<select className="form-control" value={form.modality} onChange={(event) => setForm((current) => ({ ...current, modality: event.target.value as Modality }))}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="grid gap-2 text-sm font-semibold">Disponibilidade<input className="form-control" value={form.availability} onChange={(event) => setForm((current) => ({ ...current, availability: event.target.value }))} required /></label>
+          <label className="grid gap-2 text-sm font-semibold">Descrição<textarea className="form-control min-h-24" placeholder="Conte como você gosta de jogar" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} /></label>
+          <button className="neon-button rounded-lg px-5 py-3 font-black">Adicionar simulação</button>
         </form>
       </Modal>
       <Toast message={toast} onClose={() => setToast('')} />
@@ -500,20 +513,39 @@ export function ClientPartnersPage() {
 }
 
 export function ClientChampionshipsPage() {
-  const { state } = useAppData();
+  const { state, enrollInChampionship } = useAppData();
   const [toast, setToast] = useState('');
+  const [enrolled, setEnrolled] = useState<Set<string>>(() => new Set());
+  const [enrolling, setEnrolling] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const handleEnroll = (championshipId: string) => {
+    setEnrolling(championshipId);
+    setError('');
+    void enrollInChampionship(championshipId)
+      .then((message) => {
+        setEnrolled((current) => new Set(current).add(championshipId));
+        setToast(message);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Não foi possível confirmar a inscrição.'))
+      .finally(() => setEnrolling(null));
+  };
+
   return (
     <>
-      <ClientHeader title="Campeonatos" subtitle="Visualize, inscreva-se e acompanhe classificação e chaveamento demo." />
+      <ClientHeader title="Campeonatos" subtitle="Visualize, inscreva-se e acompanhe classificação e chaveamento." />
+      {error && <p className="mb-4 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger" role="alert">{error}</p>}
       <div className="grid gap-4 md:grid-cols-2">
         {state.championships.map((championship) => (
-          <article key={championship.id} className="glass-panel card-hover rounded-lg p-5">
-            <p className="text-sm font-bold text-neon">{championship.status}</p>
+          <article key={championship.id} className="glass-panel card-hover overflow-hidden rounded-lg">
+            {(() => { const court = state.courts.find((item) => item.modality === championship.modality); return court ? <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} className="aspect-[16/7] border-b border-line" /> : null; })()}
+            <div className="p-5"><p className="text-sm font-bold text-neon">{championship.status}</p>
             <h2 className="mt-2 text-2xl font-black">{championship.name}</h2>
             <p className="mt-2 text-muted">{championship.modality} · {championship.categories}</p>
             <p className="mt-4 text-sm">{championship.regulation}</p>
             <div className="mt-4 flex flex-wrap gap-2">{championship.bracket.map((item) => <span key={item} className="rounded-full border border-line px-3 py-1 text-xs">{item}</span>)}</div>
-            <button className="neon-button mt-5 rounded-lg px-4 py-2 font-bold" onClick={() => setToast(`Inscrição demo enviada para ${championship.name}.`)}>Inscrever-se</button>
+            <button className="neon-button mt-5 rounded-lg px-4 py-2 font-bold disabled:opacity-60" disabled={enrolled.has(championship.id) || enrolling === championship.id || !championship.status.toLowerCase().includes('inscri')} onClick={() => handleEnroll(championship.id)}>{enrolled.has(championship.id) ? 'Inscrição confirmada' : enrolling === championship.id ? 'Confirmando…' : championship.status.toLowerCase().includes('inscri') ? 'Inscrever-se' : 'Inscrições em breve'}</button>
+            </div>
           </article>
         ))}
       </div>
@@ -527,24 +559,37 @@ export function ClientAiPage() {
   const { askAi } = useAppData();
   const [question, setQuestion] = useState('Qual meu melhor horário para jogar?');
   const [answer, setAnswer] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const suggestions = ['Quanto gastei este mês?', 'Qual modalidade eu mais pratico?', 'Qual quadra utilizo com mais frequência?', 'Quando foi minha última reserva?'];
   return (
     <>
-      <ClientHeader title="PlaySpace AI" subtitle="Assistente virtual demo usando seus dados internos do sistema." />
+      <ClientHeader title="PlaySpace AI" subtitle="Assistente demonstrativo baseado em regras e nos dados da sua conta." />
       <section className="glass-panel rounded-lg p-5">
         <div className="mb-5 flex items-center gap-3">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-neon/15"><Sparkles className="h-6 w-6 text-neon" /></div>
           <div>
             <h2 className="font-black">PlaySpace AI</h2>
-            <p className="text-sm text-muted">Sem APIs externas. Respostas simuladas com dados locais.</p>
+            <p className="text-sm text-muted">Sem envio a serviços externos; a API gera respostas demonstrativas a partir dos dados internos.</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">{suggestions.map((item) => <button key={item} className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => setQuestion(item)}>{item}</button>)}</div>
-        <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (user) setAnswer(askAi(question, user)); }}>
-          <input className="form-control flex-1" value={question} onChange={(event) => setQuestion(event.target.value)} />
-          <button className="neon-button rounded-lg px-4" aria-label="Enviar pergunta"><Send className="h-5 w-5" /></button>
+        <form className="mt-5 flex gap-2" onSubmit={(event) => {
+          event.preventDefault();
+          if (!user || !question.trim()) return;
+          setIsSubmitting(true);
+          setError('');
+          void askAi(question.trim(), user)
+            .then(setAnswer)
+            .catch((reason) => setError(reason instanceof Error ? reason.message : 'Não foi possível consultar o assistente.'))
+            .finally(() => setIsSubmitting(false));
+        }}>
+          <label className="sr-only" htmlFor="ai-question">Pergunta para o PlaySpace AI</label>
+          <input id="ai-question" className="form-control min-w-0 flex-1" value={question} onChange={(event) => setQuestion(event.target.value)} required />
+          <button className="neon-button min-w-11 rounded-lg px-3 disabled:opacity-60 sm:px-4" aria-label={isSubmitting ? 'Consultando assistente' : 'Enviar pergunta'} disabled={isSubmitting || !question.trim()}>{isSubmitting ? <span className="text-sm font-bold">…</span> : <Send className="h-5 w-5" />}</button>
         </form>
-        {answer && <div className="mt-5 rounded-lg border border-neon/30 bg-neon/10 p-4"><p className="text-sm font-bold text-neon">Resposta</p><p className="mt-2">{answer}</p></div>}
+        {error && <p className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger" role="alert">{error}</p>}
+        {answer && <div className="mt-5 rounded-lg border border-neon/30 bg-neon/10 p-4" aria-live="polite"><p className="text-sm font-bold text-neon">Resposta</p><p className="mt-2">{answer}</p></div>}
       </section>
     </>
   );

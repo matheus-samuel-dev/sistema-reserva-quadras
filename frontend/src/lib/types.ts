@@ -27,6 +27,7 @@ export interface User {
   role: Role;
   active: boolean;
   profile: UserProfile;
+  temporaryPassword?: string;
 }
 
 export interface Court {
@@ -101,12 +102,14 @@ export interface Achievement {
   progress: number;
   target: number;
   percent: number;
+  createdAt?: string;
 }
 
 export interface CommunityPost {
   id: string;
   authorId: string;
   authorName: string;
+  avatarUrl?: string;
   content: string;
   type: string;
   likes: number;
@@ -118,11 +121,13 @@ export interface PartnerAd {
   id: string;
   playerId: string;
   playerName: string;
+  avatarUrl?: string;
   modality: Modality;
   level: string;
   city: string;
   availability: string;
   notes: string;
+  createdAt?: string;
 }
 
 export interface Championship {
@@ -135,11 +140,13 @@ export interface Championship {
   prize: string;
   status: string;
   bracket: string[];
+  createdAt?: string;
 }
 
 export interface Review {
   id: string;
   userName: string;
+  avatarUrl?: string;
   courtName: string;
   cleaning: number;
   lighting: number;
@@ -148,6 +155,17 @@ export interface Review {
   courtQuality: number;
   average: number;
   comment: string;
+  createdAt?: string;
+}
+
+export interface RankingEntry {
+  id: string;
+  name: string;
+  city: string;
+  favoriteModality: Modality;
+  reservations: number;
+  hours: number;
+  attendanceRate: number;
 }
 
 export interface Settings {
@@ -171,6 +189,7 @@ export interface PlaySpaceState {
   partnerAds: PartnerAd[];
   championships: Championship[];
   reviews: Review[];
+  ranking: RankingEntry[];
   settings: Settings;
   preferences: {
     theme: 'dark' | 'light';

@@ -14,6 +14,7 @@ import {
   Filter,
   Flame,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Settings,
@@ -27,27 +28,33 @@ import {
   XCircle
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
+import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CourtImage } from '../../components/CourtImage';
 import { EmptyState } from '../../components/EmptyState';
+import { IconField } from '../../components/IconField';
 import { Modal } from '../../components/Modal';
 import { PaymentFlow } from '../../components/PaymentFlow';
 import { ReservationForm } from '../../components/ReservationForm';
+import { ReservationStatusDonut } from '../../components/ReservationStatusDonut';
 import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Toast } from '../../components/Toast';
+import { Tooltip as UiTooltip } from '../../components/Tooltip';
 import { WeeklyCalendar } from '../../components/WeeklyCalendar';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Court, CourtStatus, Modality, Reservation, ReservationStatus, Role, User } from '../../lib/types';
+import { fetchSystemStatus, tokenFromStorage } from '../../lib/api';
+import { reservationStatusOrder } from '../../lib/status';
+import type { Court, CourtStatus, Modality, Payment, Reservation, ReservationFormInput, ReservationStatus, Role, User } from '../../lib/types';
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
 const courtStatuses: CourtStatus[] = ['Disponível', 'Em manutenção', 'Indisponível'];
-const reservationStatuses: ReservationStatus[] = ['Pendente', 'Confirmada', 'Em andamento', 'Concluída', 'Cancelada'];
-const chartColors = ['#7CFF4F', '#55D6FF', '#8B5CF6', '#FFB84D', '#FB7185', '#94A3B8'];
-const chartTooltip = { background: '#0b1117', border: '1px solid rgba(148,163,184,.2)', borderRadius: 8 };
+const reservationStatuses: ReservationStatus[] = [...reservationStatusOrder];
+const chartTooltip = { background: 'var(--tooltip-bg)', color: 'var(--tooltip-text)', border: '1px solid var(--border-strong)', borderRadius: 10, boxShadow: 'var(--shadow-panel)' };
 
 const todayIso = () => {
   const date = new Date();
@@ -97,19 +104,26 @@ function SectionTitle({ title, action }: { title: string; action?: ReactNode }) 
 }
 
 function ReservationDetails({ reservation }: { reservation: Reservation }) {
+  const { state } = useAppData();
+  const client = state.users.find((item) => item.id === reservation.clientId);
+  const court = state.courts.find((item) => item.id === reservation.courtId);
+  const duration = minutesBetween(reservation.startTime, reservation.endTime);
   return (
-    <div className="grid gap-3">
-      <div className="soft-panel rounded-lg p-4">
-        <p className="text-sm text-muted">Código</p>
-        <h3 className="text-2xl font-black">{reservation.code}</h3>
+    <div className="grid gap-4">
+      <div className="grid overflow-hidden rounded-lg border border-line sm:grid-cols-[.8fr_1.2fr]">
+        <CourtImage courtId={reservation.courtId} courtName={reservation.courtName} modality={reservation.modality} className="h-full min-h-40 border-b border-line sm:border-b-0 sm:border-r" />
+        <div className="flex flex-col justify-between p-4">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-neon">{reservation.modality}</p><h3 className="mt-1 text-2xl font-black">{reservation.code}</h3><p className="mt-1 text-sm text-muted">{reservation.courtName}</p></div><StatusBadge status={reservation.status} /></div>
+          <div className="mt-5 flex items-center gap-3"><Avatar name={reservation.clientName} src={client?.profile.photo} size={42} /><div><p className="font-bold">{reservation.clientName}</p><p className="text-xs text-muted">{client?.email ?? 'Cliente PlaySpace'}</p></div></div>
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {[
-          ['Cliente', reservation.clientName],
-          ['Quadra', reservation.courtName],
-          ['Modalidade', reservation.modality],
-          ['Data', reservation.date],
+          ['Data', new Date(`${reservation.date}T12:00:00`).toLocaleDateString('pt-BR')],
           ['Horário', `${reservation.startTime} - ${reservation.endTime}`],
+          ['Duração', `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}min` : ''}`],
+          ['Jogadores', `${reservation.players}${court ? ` de ${court.playerCapacity}` : ''}`],
+          ['Pagamento', reservation.paymentMethod],
           ['Valor', currency(reservation.totalValue)]
         ].map(([label, value]) => (
           <div key={label} className="app-card p-3">
@@ -118,8 +132,13 @@ function ReservationDetails({ reservation }: { reservation: Reservation }) {
           </div>
         ))}
       </div>
-      <StatusBadge status={reservation.status} />
-      <div className="rounded-lg border border-line p-3 text-sm text-muted">{reservation.history.join(' · ')}</div>
+      {reservation.notes && <div className="rounded-lg border border-line bg-[var(--surface-1)] p-4"><p className="text-xs font-bold uppercase text-muted">Observações</p><p className="mt-2 text-sm">{reservation.notes}</p></div>}
+      <div className="rounded-lg border border-line p-4">
+        <p className="text-xs font-bold uppercase text-muted">Histórico da reserva</p>
+        <ol className="mt-4 grid gap-3">
+          {reservation.history.map((event, index) => <li key={`${event}-${index}`} className="relative flex gap-3 text-sm before:mt-1.5 before:h-2.5 before:w-2.5 before:shrink-0 before:rounded-full before:bg-neon"><span>{event}</span></li>)}
+        </ol>
+      </div>
     </div>
   );
 }
@@ -134,13 +153,15 @@ export function AdminDashboard() {
     const activeReservations = state.reservations.filter((item) => item.status !== 'Cancelada');
     const weekReservations = activeReservations.filter((item) => weekDays.includes(item.date));
     const todayReservations = activeReservations.filter((item) => item.date === today);
+    const nowKey = `${today} ${new Date().toTimeString().slice(0, 5)}`;
     const upcoming = activeReservations
-      .filter((item) => item.date >= today)
+      .filter((item) => `${item.date} ${item.endTime}` > nowKey)
       .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
       .slice(0, 5);
-    const revenue = state.payments.filter((item) => item.status === 'Aprovado').reduce((sum, item) => sum + item.amount, 0);
+    const monthKey = today.slice(0, 7);
+    const revenue = state.payments.filter((item) => item.status === 'Aprovado' && (item.paidAt ?? today).slice(0, 7) === monthKey).reduce((sum, item) => sum + item.amount, 0);
     const occupiedHours = weekReservations.reduce((sum, item) => sum + Math.max(0, minutesBetween(item.startTime, item.endTime)) / 60, 0);
-    const totalAvailableHours = Math.max(1, state.courts.length * 14 * 7);
+    const totalAvailableHours = Math.max(1, state.courts.filter((court) => court.status === 'Disponível').length * 14 * 7);
     const occupancy = Math.round((occupiedHours / totalAvailableHours) * 100);
     const cancellations = state.reservations.filter((item) => item.status === 'Cancelada').length;
     const byStatus = reservationStatuses.map((status) => ({ name: status, value: state.reservations.filter((item) => item.status === status).length }));
@@ -173,46 +194,49 @@ export function AdminDashboard() {
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Painel executivo com operação, receita, ocupação, cancelamentos e agenda futura." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <StatCard title="Reservas hoje" value={data.todayReservations.length} hint="+12% vs ontem" icon={CalendarDays} tone="neon" />
-        <StatCard title="Reservas da semana" value={data.weekReservations.length} hint="+9% vs semana anterior" icon={CalendarClock} tone="cyan" />
-        <StatCard title="Taxa de ocupação" value={`${data.occupancy}%`} hint="+11% vs mês anterior" icon={TrendingUp} tone="neon" />
-        <StatCard title="Receita do mês" value={currency(data.revenue)} hint="+8,5% vs mês anterior" icon={Banknote} tone="amber" />
-        <StatCard title="Cancelamentos" value={data.cancellations} hint="monitorar motivos" icon={XCircle} tone="danger" />
-        <StatCard title="Próximas reservas" value={data.upcoming.length} hint="agenda ativa" icon={Clock3} tone="cyan" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <StatCard title="Reservas hoje" value={data.todayReservations.length} hint="Calculado pela agenda de hoje" icon={CalendarDays} tone="neon" />
+        <StatCard title="Reservas da semana" value={data.weekReservations.length} hint="Segunda a domingo" icon={CalendarClock} tone="cyan" />
+        <StatCard title="Taxa de ocupação" value={`${data.occupancy}%`} hint="Horas ocupadas ÷ horas disponíveis" icon={TrendingUp} tone="neon" />
+        <StatCard title="Receita do mês" value={currency(data.revenue)} hint="Somente pagamentos aprovados" icon={Banknote} tone="amber" />
+        <StatCard title="Cancelamentos" value={data.cancellations} hint="Total no período demonstrado" icon={XCircle} tone="danger" />
+        <StatCard title="Próximas reservas" value={data.upcoming.length} hint="Sem incluir horários passados" icon={Clock3} tone="cyan" />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
         {executives.map(([title, value, Icon, tone]) => <StatCard key={title} title={title} value={value} icon={Icon} tone={tone} />)}
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-        <section className="glass-panel rounded-lg p-5">
+      <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <section className="glass-panel min-w-0 rounded-lg p-5">
           <SectionTitle title="Próximas reservas" action={<StatusBadge status="Confirmada" compact />} />
           <div className="grid gap-3">
             {data.upcoming.map((reservation) => (
-              <div key={reservation.id} className="app-card flex items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
+              <div key={reservation.id} className="app-card flex min-w-0 flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                <Avatar name={reservation.clientName} src={state.users.find((item) => item.id === reservation.clientId)?.profile.photo} size={40} />
+                <div className="min-w-0 flex-1">
                   <p className="truncate font-bold">{reservation.courtName}</p>
                   <p className="truncate text-sm text-muted">{reservation.clientName} · {reservation.date} · {reservation.startTime}</p>
                 </div>
-                <StatusBadge status={reservation.status} compact />
+                <span className="shrink-0"><StatusBadge status={reservation.status} compact /></span>
               </div>
             ))}
             {data.upcoming.length === 0 && <EmptyState title="Sem reservas futuras" description="Novas reservas aparecerão aqui em tempo real." />}
           </div>
         </section>
-        <section className="glass-panel rounded-lg p-5">
+        <section className="glass-panel min-w-0 overflow-hidden rounded-lg p-5">
           <SectionTitle title="Reservas e receita da semana" action={<strong className="text-neon">{data.occupancy}% ocupação</strong>} />
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.daily}>
-                <CartesianGrid stroke="rgba(148,163,184,.12)" />
-                <XAxis dataKey="day" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip contentStyle={chartTooltip} />
-                <Line type="monotone" dataKey="reservas" stroke="#7CFF4F" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="receita" stroke="#55D6FF" strokeWidth={3} dot={{ r: 4 }} />
+                <CartesianGrid stroke="var(--line)" />
+                <XAxis dataKey="day" stroke="var(--muted)" />
+                <YAxis yAxisId="reservas" stroke="var(--primary)" allowDecimals={false} />
+                <YAxis yAxisId="receita" orientation="right" stroke="var(--info)" tickFormatter={(value) => `R$ ${value}`} />
+                <RechartsTooltip contentStyle={chartTooltip} formatter={(value, name) => name === 'receita' ? [currency(Number(value)), 'Receita'] : [value, 'Reservas']} />
+                <Legend formatter={(value) => value === 'receita' ? 'Receita (R$)' : 'Reservas'} />
+                <Line yAxisId="reservas" type="monotone" dataKey="reservas" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4 }} />
+                <Line yAxisId="receita" type="monotone" dataKey="receita" stroke="var(--info)" strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -222,16 +246,7 @@ export function AdminDashboard() {
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Reservas por status" />
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={data.byStatus} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85}>
-                  {data.byStatus.map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={chartTooltip} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <ReservationStatusDonut data={data.byStatus} />
         </section>
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Reservas por modalidade" />
@@ -239,9 +254,9 @@ export function AdminDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.byModality}>
                 <XAxis dataKey="name" hide />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip contentStyle={chartTooltip} />
-                <Bar dataKey="reservas" fill="#55D6FF" radius={[6, 6, 0, 0]} />
+                <YAxis stroke="var(--muted)" allowDecimals={false} />
+                <RechartsTooltip contentStyle={chartTooltip} />
+                <Bar dataKey="reservas" fill="var(--info)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -251,10 +266,10 @@ export function AdminDashboard() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.peakHours}>
-                <XAxis dataKey="hour" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip contentStyle={chartTooltip} />
-                <Bar dataKey="reservas" fill="#7CFF4F" radius={[6, 6, 0, 0]} />
+                <XAxis dataKey="hour" stroke="var(--muted)" />
+                <YAxis stroke="var(--muted)" allowDecimals={false} />
+                <RechartsTooltip contentStyle={chartTooltip} />
+                <Bar dataKey="reservas" fill="var(--primary)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -271,14 +286,15 @@ export function AdminDashboard() {
                 <p className="text-xs text-muted">{activity.actor} · {activity.category}</p>
               </div>
             ))}
+            {state.activities.length === 0 && <EmptyState title="Nenhuma atividade registrada" description="O histórico aparecerá aqui assim que a API registrar uma ação operacional." />}
           </div>
         </section>
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Comunidade e clima" />
           <div className="grid gap-3">
             <div className="app-card p-4">
-              <strong className="text-2xl text-neon">27°C</strong>
-              <p className="text-sm text-muted">Ideal para Beach Tennis. Quadras abertas recomendadas.</p>
+              <div className="flex items-center justify-between gap-3"><strong className="text-2xl text-neon">27°C</strong><StatusBadge status="Demonstração" compact /></div>
+              <p className="text-sm text-muted">Condição simulada para São Paulo. Quadras abertas recomendadas.</p>
             </div>
             {state.posts.slice(0, 3).map((post) => (
               <p key={post.id} className="app-card p-3 text-sm"><strong>{post.authorName}</strong> {post.content}</p>
@@ -295,6 +311,7 @@ export function AdminAgendaPage() {
   const { user } = useAuth();
   const [selected, setSelected] = useState<Reservation | null>(null);
   const [creating, setCreating] = useState(false);
+  const [reservationDraft, setReservationDraft] = useState<Partial<ReservationFormInput>>({});
   const [courtFilter, setCourtFilter] = useState('Todas');
   const [modalityFilter, setModalityFilter] = useState<Modality | 'Todas'>('Todas');
 
@@ -304,24 +321,30 @@ export function AdminAgendaPage() {
         title="Agenda"
         subtitle="Calendário semanal profissional com filtros, legenda, horário atual e feedback ao selecionar janelas livres."
         action={
-          <div className="flex flex-wrap gap-2">
-            <select className="form-control w-auto min-w-44 px-3 py-2 text-sm" value={courtFilter} onChange={(event) => setCourtFilter(event.target.value)}>
-              <option>Todas</option>
+          <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
+            <label className="grid gap-1.5 text-xs font-bold text-muted">
+              Quadra
+            <select className="form-control w-full min-w-44 px-3 py-2 text-sm" value={courtFilter} onChange={(event) => setCourtFilter(event.target.value)} aria-label="Filtrar agenda por quadra">
+              <option value="Todas">Todas as quadras</option>
               {state.courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
             </select>
-            <select className="form-control w-auto min-w-44 px-3 py-2 text-sm" value={modalityFilter} onChange={(event) => setModalityFilter(event.target.value as Modality | 'Todas')}>
-              <option>Todas</option>
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-muted">
+              Modalidade
+            <select className="form-control w-full min-w-44 px-3 py-2 text-sm" value={modalityFilter} onChange={(event) => setModalityFilter(event.target.value as Modality | 'Todas')} aria-label="Filtrar agenda por modalidade">
+              <option value="Todas">Todas as modalidades</option>
               {modalities.map((modality) => <option key={modality}>{modality}</option>)}
             </select>
+            </label>
           </div>
         }
       />
-      <WeeklyCalendar reservations={state.reservations} courtFilter={courtFilter} modalityFilter={modalityFilter} onReservationClick={setSelected} onNewReservation={() => setCreating(true)} />
+      <WeeklyCalendar reservations={state.reservations} courtFilter={courtFilter} modalityFilter={modalityFilter} onReservationClick={setSelected} onNewReservation={(initialValues) => { setReservationDraft(initialValues ?? {}); setCreating(true); }} />
       <Modal title="Detalhes da reserva" open={Boolean(selected)} onClose={() => setSelected(null)}>
         {selected && <ReservationDetails reservation={selected} />}
       </Modal>
       <Modal title="Nova reserva" open={creating} onClose={() => setCreating(false)}>
-        {user && <ReservationForm actor={user} onCreated={() => setCreating(false)} />}
+        {user && <ReservationForm actor={user} initialValues={reservationDraft} onCreated={() => { setCreating(false); setReservationDraft({}); }} />}
       </Modal>
     </>
   );
@@ -332,6 +355,7 @@ export function AdminCourtsPage() {
   const [editing, setEditing] = useState<Court | null>(null);
   const [removing, setRemoving] = useState<Court | null>(null);
   const [toast, setToast] = useState('');
+  const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
   const blank: Court = {
     id: '',
     name: '',
@@ -340,7 +364,7 @@ export function AdminCourtsPage() {
     pricePerHour: 120,
     playerCapacity: 4,
     status: 'Disponível',
-    image: 'linear-gradient(135deg, #16321f, #0b1117 58%, #77ff4f)',
+    image: '',
     location: '',
     lighting: true,
     covered: false,
@@ -353,7 +377,7 @@ export function AdminCourtsPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {state.courts.map((court) => (
           <article key={court.id} className="glass-panel card-hover overflow-hidden rounded-lg">
-            <div className="h-32" style={{ background: court.image }} />
+            <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} className="aspect-[16/8] border-b border-line" />
             <div className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -369,27 +393,36 @@ export function AdminCourtsPage() {
                 <span className="rounded-lg border border-line p-2">{court.covered ? 'Coberta' : 'Aberta'}</span>
               </div>
               <div className="mt-4 flex gap-2">
-                <button className="ghost-button rounded-lg p-2" onClick={() => setEditing(court)} aria-label={`Editar ${court.name}`}><Edit3 className="h-4 w-4" /></button>
-                <button className="ghost-button rounded-lg p-2" onClick={() => setRemoving(court)} aria-label={`Remover ${court.name}`}><Trash2 className="h-4 w-4" /></button>
+                <UiTooltip content={`Editar ${court.name}`}><button className="ghost-button rounded-lg p-2" onClick={() => setEditing(court)} aria-label={`Editar ${court.name}`}><Edit3 className="h-4 w-4" /></button></UiTooltip>
+                <UiTooltip content="Inativar preservando o histórico"><button className="ghost-button rounded-lg p-2" onClick={() => setRemoving(court)} aria-label={`Inativar ${court.name}`}><Trash2 className="h-4 w-4" /></button></UiTooltip>
               </div>
             </div>
           </article>
         ))}
       </div>
-      <CourtModal key={editing?.id || (editing ? 'new' : 'closed')} court={editing} onClose={() => setEditing(null)} onSave={(court) => { saveCourt(court); setEditing(null); setToast('Quadra salva com sucesso.'); }} />
-      <ConfirmDialog open={Boolean(removing)} title="Remover quadra" description={`A quadra ${removing?.name ?? ''} será removida da vitrine demo. Reservas existentes não serão apagadas.`} confirmLabel="Remover" onClose={() => setRemoving(null)} onConfirm={() => { if (removing) removeCourt(removing.id); setRemoving(null); setToast('Quadra removida da vitrine demo.'); }} />
-      <Toast message={toast} onClose={() => setToast('')} />
+      <CourtModal key={editing?.id || (editing ? 'new' : 'closed')} court={editing} onClose={() => setEditing(null)} onSave={async (court) => {
+        try { await saveCourt(court); setEditing(null); setToastTone('success'); setToast('Quadra salva com sucesso.'); }
+        catch (error) { setToastTone('danger'); setToast(error instanceof Error ? error.message : 'Não foi possível salvar a quadra.'); }
+      }} />
+      <ConfirmDialog open={Boolean(removing)} title="Inativar quadra" description={`A quadra ${removing?.name ?? ''} ficará indisponível para novas reservas. Todo o histórico será preservado.`} confirmLabel="Inativar quadra" onClose={() => setRemoving(null)} onConfirm={async () => {
+        if (!removing) return;
+        try { await removeCourt(removing.id); setToastTone('success'); setToast('Quadra inativada com histórico preservado.'); setRemoving(null); }
+        catch (error) { setToastTone('danger'); setToast(error instanceof Error ? error.message : 'Não foi possível inativar a quadra.'); }
+      }} />
+      <Toast message={toast} tone={toastTone} onClose={() => setToast('')} />
     </>
   );
 }
 
-function CourtModal({ court, onClose, onSave }: { court: Court | null; onClose: () => void; onSave: (court: Court) => void }) {
+function CourtModal({ court, onClose, onSave }: { court: Court | null; onClose: () => void; onSave: (court: Court) => void | Promise<void> }) {
   const [draft, setDraft] = useState(court);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   if (!court || !draft) return null;
   const update = (key: keyof Court, value: string | number | boolean) => setDraft((current) => current ? { ...current, [key]: value } : current);
   return (
     <Modal title={court.id ? 'Editar quadra' : 'Nova quadra'} open={Boolean(court)} onClose={onClose}>
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSave(draft); }}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(''); try { await onSave(draft); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.'); } finally { setSaving(false); } }}>
         <label className="grid gap-2 text-sm font-semibold">Nome<input className="form-control" value={draft.name} onChange={(event) => update('name', event.target.value)} required /></label>
         <label className="grid gap-2 text-sm font-semibold">Modalidade<select className="form-control" value={draft.modality} onChange={(event) => update('modality', event.target.value)}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
         <label className="grid gap-2 text-sm font-semibold">Preço/h<input className="form-control" type="number" min={1} value={draft.pricePerHour} onChange={(event) => update('pricePerHour', Number(event.target.value))} /></label>
@@ -399,7 +432,8 @@ function CourtModal({ court, onClose, onSave }: { court: Court | null; onClose: 
         <label className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm font-semibold"><input type="checkbox" checked={draft.lighting} onChange={(event) => update('lighting', event.target.checked)} />Iluminação</label>
         <label className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm font-semibold"><input type="checkbox" checked={draft.covered} onChange={(event) => update('covered', event.target.checked)} />Coberta</label>
         <label className="grid gap-2 text-sm font-semibold md:col-span-2">Descrição<textarea className="form-control min-h-24" value={draft.description} onChange={(event) => update('description', event.target.value)} /></label>
-        <button className="neon-button rounded-lg px-5 py-3 font-black md:col-span-2">Salvar quadra</button>
+        {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)] md:col-span-2" role="alert">{error}</p>}
+        <button className="neon-button rounded-lg px-5 py-3 font-black disabled:opacity-60 md:col-span-2" disabled={saving}>{saving ? 'Salvando quadra...' : 'Salvar quadra'}</button>
       </form>
     </Modal>
   );
@@ -417,7 +451,7 @@ export function AdminReservationsPage() {
   const [toast, setToast] = useState('');
   const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
   const [page, setPage] = useState(1);
-  const pageSize = 8;
+  const [pageSize, setPageSize] = useState(8);
 
   const filtered = useMemo(
     () =>
@@ -433,10 +467,10 @@ export function AdminReservationsPage() {
   const visible = filtered.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize);
 
   const requestCancel = (reservation: Reservation) => setCanceling(reservation);
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
     if (!canceling || !user) return;
     try {
-      cancelReservation(canceling.id, user);
+      await cancelReservation(canceling.id, user);
       setToastTone('success');
       setToast(`Reserva ${canceling.code} cancelada com sucesso.`);
     } catch (err) {
@@ -450,22 +484,20 @@ export function AdminReservationsPage() {
   return (
     <>
       <PageHeader title="Reservas" subtitle="Busca instantânea, filtros por status, confirmação de cancelamento, pagamento demo e paginação." action={<button className="neon-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />Nova reserva</button>} />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <label className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input className="form-control py-2 pl-10 pr-3" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Buscar cliente, quadra, modalidade ou código" />
-        </label>
-        <label className="relative">
-          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <select className="form-control w-auto min-w-44 py-2 pl-10 pr-3" value={status} onChange={(event) => { setStatus(event.target.value as ReservationStatus | 'Todos'); setPage(1); }}>
-            <option>Todos</option>
+      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(240px,1fr)_auto] sm:items-end">
+        <IconField label="Buscar reservas" leadingIcon={<Search className="h-4 w-4" />} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Cliente, quadra, modalidade ou código" />
+        <label className="grid gap-2 text-sm font-semibold">
+          Status
+          <select className="form-control min-w-48 py-2" value={status} onChange={(event) => { setStatus(event.target.value as ReservationStatus | 'Todos'); setPage(1); }}>
+            <option value="Todos">Todos os status</option>
             {reservationStatuses.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
       </div>
       <div className="glass-panel table-shell">
+        <p className="border-b border-line px-4 py-3 text-xs font-semibold text-muted md:hidden">Deslize a tabela horizontalmente; a coluna de ações permanece visível.</p>
         <div className="overflow-x-auto">
-          <table className="data-table min-w-[940px]">
+          <table className="data-table responsive-data-table min-w-[940px]">
             <thead>
               <tr>
                 {['Código', 'Cliente', 'Quadra', 'Data', 'Horário', 'Valor', 'Status', 'Ações'].map((header) => <th key={header}>{header}</th>)}
@@ -475,7 +507,7 @@ export function AdminReservationsPage() {
               {visible.map((reservation) => (
                 <tr key={reservation.id}>
                   <td className="font-black">{reservation.code}</td>
-                  <td>{reservation.clientName}</td>
+                  <td><span className="flex items-center gap-2"><Avatar name={reservation.clientName} src={state.users.find((item) => item.id === reservation.clientId)?.profile.photo} size={32} /><span>{reservation.clientName}</span></span></td>
                   <td>{reservation.courtName}</td>
                   <td>{reservation.date}</td>
                   <td>{reservation.startTime} - {reservation.endTime}</td>
@@ -483,9 +515,9 @@ export function AdminReservationsPage() {
                   <td><StatusBadge status={reservation.status} compact /></td>
                   <td>
                     <div className="flex gap-2">
-                      <button className="ghost-button rounded-lg p-2" onClick={() => setSelected(reservation)} aria-label="Ver detalhes"><Eye className="h-4 w-4" /></button>
-                      <button className="ghost-button rounded-lg p-2" onClick={() => setPaying(reservation)} aria-label="Pagar" disabled={reservation.status === 'Cancelada'}><CreditCard className="h-4 w-4" /></button>
-                      <button className="ghost-button rounded-lg p-2" onClick={() => requestCancel(reservation)} aria-label="Cancelar" disabled={['Cancelada', 'Concluída'].includes(reservation.status)}><XCircle className="h-4 w-4" /></button>
+                      <UiTooltip content="Visualizar"><button className="ghost-button rounded-lg p-2" onClick={() => setSelected(reservation)} aria-label="Visualizar reserva"><Eye className="h-4 w-4" /></button></UiTooltip>
+                      <UiTooltip content={reservation.status === 'Pendente' ? 'Registrar pagamento' : 'Pagamento indisponível neste status'}><button className="ghost-button rounded-lg p-2" onClick={() => setPaying(reservation)} aria-label="Registrar pagamento" disabled={reservation.status !== 'Pendente'}><CreditCard className="h-4 w-4" /></button></UiTooltip>
+                      <UiTooltip content="Cancelar"><button className="ghost-button rounded-lg p-2" onClick={() => requestCancel(reservation)} aria-label="Cancelar reserva" disabled={['Cancelada', 'Concluída'].includes(reservation.status)}><XCircle className="h-4 w-4" /></button></UiTooltip>
                     </div>
                   </td>
                 </tr>
@@ -496,7 +528,7 @@ export function AdminReservationsPage() {
         </div>
         {filtered.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm">
-            <span className="text-muted">{filtered.length} reservas encontradas</span>
+            <div className="flex items-center gap-3"><span className="text-muted">{filtered.length} reservas encontradas</span><label className="flex items-center gap-2 text-xs font-semibold text-muted">Por página<select className="form-control min-w-14 py-1.5 text-xs" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>{[8, 16, 24].map((value) => <option key={value}>{value}</option>)}</select></label></div>
             <div className="flex items-center gap-2">
               <button className="ghost-button rounded-lg px-3 py-1.5 font-bold" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button>
               <span className="text-muted">Página {Math.min(page, totalPages)} de {totalPages}</span>
@@ -517,17 +549,20 @@ export function AdminReservationsPage() {
 export function AdminPaymentsPage() {
   const { state } = useAppData();
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<Payment | null>(null);
   const filtered = state.payments.filter((payment) => `${payment.reservationCode} ${payment.method} ${payment.transactionCode}`.toLowerCase().includes(query.toLowerCase()));
+  const approved = state.payments.filter((payment) => payment.status === 'Aprovado');
+  const revenue = approved.reduce((sum, payment) => sum + payment.amount, 0);
+  const averageTicket = approved.length ? revenue / approved.length : 0;
   return (
     <>
       <PageHeader title="Pagamentos" subtitle="Controle de PIX, crédito, débito e status de transações demo." />
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <StatCard title="Receita aprovada" value={currency(revenue)} hint="Pagamentos demonstrativos" icon={Banknote} tone="neon" />
+        <StatCard title="Ticket médio" value={currency(averageTicket)} hint="Média dos aprovados" icon={TrendingUp} tone="cyan" />
         {(['Aprovado', 'Pendente', 'Recusado', 'Cancelado'] as const).map((status) => <StatCard key={status} title={status} value={state.payments.filter((payment) => payment.status === status).length} icon={CreditCard} tone={status === 'Aprovado' ? 'neon' : status === 'Pendente' ? 'amber' : 'danger'} />)}
       </div>
-      <label className="relative my-4 block">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <input className="form-control py-2 pl-10 pr-3" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pagamento, método ou transação" />
-      </label>
+      <IconField wrapperClassName="my-4" label="Buscar pagamentos" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Reserva, método ou transação" />
       <div className="grid gap-3">
         {filtered.slice(0, 16).map((payment) => (
           <div key={payment.id} className="glass-panel card-hover flex flex-wrap items-center justify-between gap-3 rounded-lg p-4">
@@ -538,35 +573,60 @@ export function AdminPaymentsPage() {
             <div className="text-right">
               <p className="font-black">{currency(payment.amount)}</p>
               <StatusBadge status={payment.status} compact />
+              <button className="ghost-button mt-2 min-h-10 rounded-lg px-3 py-2 text-xs font-bold text-neon" onClick={() => setSelected(payment)}>Ver detalhes</button>
             </div>
           </div>
         ))}
         {filtered.length === 0 && <EmptyState title="Nenhum pagamento encontrado" description="A busca não retornou transações para os filtros atuais." />}
       </div>
+      <Modal title="Detalhes do pagamento" open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="max-w-lg">
+        {selected && <div className="grid gap-3"><div className="soft-panel rounded-lg p-4"><p className="text-xs text-muted">Transação</p><p className="break-all text-xl font-black">{selected.transactionCode}</p></div>{[['Reserva', selected.reservationCode], ['Método', selected.method], ['Valor', currency(selected.amount)], ['Data', selected.paidAt ? new Date(selected.paidAt).toLocaleString('pt-BR') : 'Aguardando confirmação']].map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 text-sm"><span className="text-muted">{label}</span><strong className="text-right">{value}</strong></div>)}<div className="flex items-center justify-between rounded-lg border border-line p-3"><span className="text-sm text-muted">Status</span><StatusBadge status={selected.status} /></div><p className="rounded-lg border border-cyan/25 bg-cyan/10 p-3 text-xs text-cyan">Comprovante demonstrativo: esta transação não representa movimentação financeira real.</p></div>}
+      </Modal>
     </>
   );
 }
 
 export function AdminReportsPage() {
   const { state } = useAppData();
-  const monthly = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'].map((month, index) => ({ month, receita: [4200, 5100, 6900, 7450, 8120, 9300][index], reservas: [22, 28, 31, 35, 39, 44][index] }));
+  const monthly = useMemo(() => Array.from({ length: 6 }, (_, reverseIndex) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - (5 - reverseIndex));
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return {
+      month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+      receita: state.payments.filter((payment) => payment.status === 'Aprovado' && (payment.paidAt ?? '').slice(0, 7) === key).reduce((sum, payment) => sum + payment.amount, 0),
+      reservas: state.reservations.filter((reservation) => reservation.status !== 'Cancelada' && reservation.date.slice(0, 7) === key).length
+    };
+  }), [state.payments, state.reservations]);
+  const currentMonth = todayIso().slice(0, 7);
+  const occupancyByCourt = state.courts.map((court) => {
+    const hours = state.reservations.filter((reservation) => reservation.courtId === court.id && reservation.date.startsWith(currentMonth) && reservation.status !== 'Cancelada').reduce((sum, reservation) => sum + Math.max(0, minutesBetween(reservation.startTime, reservation.endTime)) / 60, 0);
+    return { court, percent: Math.min(100, Math.round((hours / (14 * 30)) * 100)), hours };
+  });
+  const peakHours = Array.from(state.reservations.filter((item) => item.status !== 'Cancelada').reduce((map, item) => map.set(item.startTime, (map.get(item.startTime) ?? 0) + 1), new Map<string, number>())).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([hour]) => hour);
+  const activeClients = Array.from(state.reservations.reduce((map, item) => map.set(item.clientName, (map.get(item.clientName) ?? 0) + 1), new Map<string, number>())).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name]) => name);
   const exportFile = (name: string, content: string, type: string) => {
-    const url = URL.createObjectURL(new Blob([content], { type }));
+    const url = URL.createObjectURL(new Blob(['\ufeff', content], { type }));
     const link = document.createElement('a');
     link.href = url;
     link.download = name;
     link.click();
     URL.revokeObjectURL(url);
   };
+  const rows = state.reservations.map((reservation) => [reservation.code, reservation.clientName, reservation.courtName, reservation.date, reservation.startTime, reservation.endTime, reservation.status, reservation.totalValue.toFixed(2)]);
+  const csv = [['Código', 'Cliente', 'Quadra', 'Data', 'Início', 'Fim', 'Status', 'Valor'], ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const excelTable = `<html><meta charset="utf-8"><body><h1>PlaySpace — Relatório de reservas</h1><p>Gerado em ${new Date().toLocaleString('pt-BR')}</p><table border="1">${[['Código', 'Cliente', 'Quadra', 'Data', 'Início', 'Fim', 'Status', 'Valor'], ...rows].map((row) => `<tr>${row.map((cell) => `<td>${String(cell)}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
   return (
     <>
       <PageHeader
         title="Relatórios"
         subtitle="Receita, ocupação, modalidades, horários de pico e exportações."
         action={
-          <div className="flex gap-2">
-            <button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => exportFile('playspace-relatorio.pdf', 'PlaySpace - Relatório PDF demo', 'application/pdf')}><Download className="h-4 w-4" />PDF</button>
-            <button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => exportFile('playspace-relatorio.csv', 'Indicador;Valor\nReceita;7450\nOcupação;68%', 'text/csv')}><FileSpreadsheet className="h-4 w-4" />Excel</button>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => window.print()}><Printer className="h-4 w-4" />Imprimir / PDF</button>
+            <button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => exportFile('playspace-relatorio.xls', excelTable, 'application/vnd.ms-excel')}><FileSpreadsheet className="h-4 w-4" />Excel</button>
+            <button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => exportFile('playspace-relatorio.csv', csv, 'text/csv;charset=utf-8')}><Download className="h-4 w-4" />CSV</button>
           </div>
         }
       />
@@ -576,12 +636,14 @@ export function AdminReportsPage() {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthly}>
-                <CartesianGrid stroke="rgba(148,163,184,.12)" />
-                <XAxis dataKey="month" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip contentStyle={chartTooltip} />
-                <Line dataKey="receita" stroke="#7CFF4F" strokeWidth={3} />
-                <Line dataKey="reservas" stroke="#55D6FF" strokeWidth={3} />
+                <CartesianGrid stroke="var(--line)" />
+                <XAxis dataKey="month" stroke="var(--muted)" />
+                <YAxis yAxisId="reservas" stroke="var(--info)" allowDecimals={false} />
+                <YAxis yAxisId="receita" orientation="right" stroke="var(--primary)" tickFormatter={(value) => `R$ ${value}`} />
+                <RechartsTooltip contentStyle={chartTooltip} formatter={(value, name) => name === 'receita' ? [currency(Number(value)), 'Receita aprovada'] : [value, 'Reservas']} />
+                <Legend formatter={(value) => value === 'receita' ? 'Receita aprovada' : 'Reservas'} />
+                <Line yAxisId="receita" dataKey="receita" stroke="var(--primary)" strokeWidth={3} />
+                <Line yAxisId="reservas" dataKey="reservas" stroke="var(--info)" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -589,12 +651,11 @@ export function AdminReportsPage() {
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Ocupação por quadra" />
           <div className="grid gap-3">
-            {state.courts.map((court, index) => {
-              const percent = 82 - index * 7;
+            {occupancyByCourt.map(({ court, percent, hours }) => {
               return (
                 <div key={court.id}>
-                  <div className="mb-1 flex justify-between text-sm"><span>{court.name}</span><span>{percent}%</span></div>
-                  <div className="h-2 rounded-full bg-white/10"><div className="h-full rounded-full bg-neon transition-all" style={{ width: `${percent}%` }} /></div>
+                  <div className="mb-1 flex justify-between text-sm"><span>{court.name}</span><span>{percent}% · {hours.toFixed(1)}h</span></div>
+                  <div className="h-2 rounded-full bg-[var(--surface-2)]"><div className="h-full rounded-full bg-neon transition-all" style={{ width: `${percent}%` }} /></div>
                 </div>
               );
             })}
@@ -603,8 +664,8 @@ export function AdminReportsPage() {
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-3">
         {[
-          ['Horários de pico', '18:00, 19:00 e 20:00'],
-          ['Clientes mais ativos', 'Lucas, Marina e Carlos'],
+          ['Horários de pico', peakHours.length ? peakHours.join(', ') : 'Sem dados no período'],
+          ['Clientes mais ativos', activeClients.length ? activeClients.join(', ') : 'Sem dados no período'],
           ['Cancelamentos', String(state.reservations.filter((item) => item.status === 'Cancelada').length)]
         ].map(([title, value]) => <div key={title} className="soft-panel card-hover rounded-lg p-5"><p className="text-sm text-muted">{title}</p><strong className="mt-2 block text-xl">{value}</strong></div>)}
       </div>
@@ -616,7 +677,10 @@ export function AdminUsersPage() {
   const { state, saveUser, toggleUserActive } = useAppData();
   const [editing, setEditing] = useState<User | null>(null);
   const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<Role | 'Todos'>('Todos');
+  const [activeFilter, setActiveFilter] = useState<'Todos' | 'Ativos' | 'Inativos'>('Todos');
   const [toast, setToast] = useState('');
+  const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
   const blank: User = {
     id: '',
     name: '',
@@ -625,20 +689,26 @@ export function AdminUsersPage() {
     active: true,
     profile: { photo: 'NV', bio: '', city: 'São Paulo', memberSince: todayIso(), favoriteModality: 'Beach Tennis', sports: ['Beach Tennis'], level: 'Iniciante', reservationsDone: 0, matchesPlayed: 0, hoursOnCourt: 0, attendanceRate: 100, achievementsUnlocked: 0 }
   };
-  const filtered = state.users.filter((item) => `${item.name} ${item.email} ${item.role}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = state.users.filter((item) => {
+    const matchesQuery = `${item.name} ${item.email} ${item.role} ${item.profile.city}`.toLowerCase().includes(query.toLowerCase());
+    const matchesRole = roleFilter === 'Todos' || item.role === roleFilter;
+    const matchesActive = activeFilter === 'Todos' || (activeFilter === 'Ativos' ? item.active : !item.active);
+    return matchesQuery && matchesRole && matchesActive;
+  });
 
   return (
     <>
       <PageHeader title="Usuários" subtitle="Listar, criar, editar, ativar/inativar e definir perfis." action={<button className="neon-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => setEditing(blank)}><Plus className="h-4 w-4" />Novo usuário</button>} />
-      <label className="relative mb-4 block">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <input className="form-control py-2 pl-10 pr-3" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar usuário, e-mail ou perfil" />
-      </label>
+      <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+        <IconField label="Buscar usuários" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, e-mail, perfil ou cidade" />
+        <label className="grid gap-2 text-sm font-semibold">Perfil<select className="form-control min-w-36" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as Role | 'Todos')}><option>Todos</option><option>ADMIN</option><option>CLIENTE</option></select></label>
+        <label className="grid gap-2 text-sm font-semibold">Status<select className="form-control min-w-36" value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as typeof activeFilter)}><option>Todos</option><option>Ativos</option><option>Inativos</option></select></label>
+      </div>
       <div className="grid gap-3">
         {filtered.map((item) => (
           <div key={item.id} className="glass-panel card-hover flex flex-wrap items-center justify-between gap-3 rounded-lg p-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-full bg-neon/15 text-sm font-black text-neon">{item.profile.photo}</div>
+              <Avatar name={item.name} src={item.profile.photo} size={44} />
               <div>
                 <p className="font-black">{item.name}</p>
                 <p className="text-sm text-muted">{item.email} · {item.role}</p>
@@ -646,79 +716,95 @@ export function AdminUsersPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={item.active ? 'Ativo' : 'Inativo'} compact />
-              <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => toggleUserActive(item.id)}>{item.active ? 'Inativar' : 'Ativar'}</button>
-              <button className="ghost-button rounded-lg p-2" onClick={() => setEditing(item)} aria-label="Editar usuário"><Edit3 className="h-4 w-4" /></button>
+              <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={async () => { try { await toggleUserActive(item.id); setToastTone('success'); setToast(`Usuário ${item.active ? 'inativado' : 'ativado'} com sucesso.`); } catch (error) { setToastTone('danger'); setToast(error instanceof Error ? error.message : 'Não foi possível alterar o usuário.'); } }}>{item.active ? 'Inativar' : 'Ativar'}</button>
+              <UiTooltip content="Editar usuário"><button className="ghost-button rounded-lg p-2" onClick={() => setEditing(item)} aria-label="Editar usuário"><Edit3 className="h-4 w-4" /></button></UiTooltip>
             </div>
           </div>
         ))}
       </div>
       {filtered.length === 0 && <EmptyState title="Nenhum usuário encontrado" description="Ajuste sua busca ou crie um novo usuário demo." actionLabel="Novo usuário" onAction={() => setEditing(blank)} />}
-      <UserModal key={editing?.id || (editing ? 'new' : 'closed')} user={editing} onClose={() => setEditing(null)} onSave={(saved) => { saveUser(saved); setEditing(null); setToast('Usuário salvo com sucesso.'); }} />
-      <Toast message={toast} onClose={() => setToast('')} />
+      <UserModal key={editing?.id || (editing ? 'new' : 'closed')} user={editing} onClose={() => setEditing(null)} onSave={async (saved) => { await saveUser(saved); setEditing(null); setToastTone('success'); setToast('Usuário salvo com sucesso.'); }} />
+      <Toast message={toast} tone={toastTone} onClose={() => setToast('')} />
     </>
   );
 }
 
-function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () => void; onSave: (user: User) => void }) {
+function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () => void; onSave: (user: User) => void | Promise<void> }) {
   const [draft, setDraft] = useState(user);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   if (!user || !draft) return null;
   const update = (key: keyof User, value: string | boolean) => setDraft((current) => current ? { ...current, [key]: value } : current);
   return (
     <Modal title={user.id ? 'Editar usuário' : 'Novo usuário'} open={Boolean(user)} onClose={onClose}>
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, profile: { ...draft.profile, photo: draft.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'US' } }); }}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); setError(''); if (!user.id && !password) { setError('Informe uma senha provisória.'); return; } if (password !== confirmPassword) { setError('A confirmação de senha não confere.'); return; } if (password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}$/.test(password)) { setError('Use ao menos 8 caracteres, maiúscula, minúscula, número e símbolo.'); return; } setSaving(true); try { await onSave({ ...draft, temporaryPassword: password || undefined }); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar o usuário.'); } finally { setSaving(false); } }}>
+        <div className="flex items-center gap-3 rounded-lg border border-line p-3 md:col-span-2"><Avatar name={draft.name || 'Novo usuário'} src={draft.profile.photo} size={54} /><div><p className="font-bold">Prévia do avatar</p><p className="text-xs text-muted">Imagem configurada ou iniciais como fallback.</p></div></div>
         <label className="grid gap-2 text-sm font-semibold">Nome<input className="form-control" value={draft.name} onChange={(event) => update('name', event.target.value)} required /></label>
         <label className="grid gap-2 text-sm font-semibold">E-mail<input className="form-control" type="email" value={draft.email} onChange={(event) => update('email', event.target.value)} required /></label>
         <label className="grid gap-2 text-sm font-semibold">Perfil<select className="form-control" value={draft.role} onChange={(event) => update('role', event.target.value as Role)}><option>ADMIN</option><option>CLIENTE</option></select></label>
         <label className="grid gap-2 text-sm font-semibold">Cidade<input className="form-control" value={draft.profile.city} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, city: event.target.value } } : current)} /></label>
+        <label className="grid gap-2 text-sm font-semibold">{user.id ? 'Nova senha (opcional)' : 'Senha provisória'}<input className="form-control" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required={!user.id} /></label>
+        <label className="grid gap-2 text-sm font-semibold">Confirmar senha<input className="form-control" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required={Boolean(password) || !user.id} /></label>
+        <label className="grid gap-2 text-sm font-semibold">Modalidade favorita<select className="form-control" value={draft.profile.favoriteModality} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, favoriteModality: event.target.value as Modality } } : current)}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label className="grid gap-2 text-sm font-semibold">Nível esportivo<select className="form-control" value={draft.profile.level} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, level: event.target.value as User['profile']['level'] } } : current)}>{['Iniciante', 'Intermediário', 'Avançado', 'Competitivo'].map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label className="grid gap-2 text-sm font-semibold md:col-span-2">URL do avatar (opcional)<input className="form-control" type="url" value={draft.profile.photo.startsWith('http') ? draft.profile.photo : ''} placeholder="https://..." onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, photo: event.target.value } } : current)} /></label>
         <label className="grid gap-2 text-sm font-semibold md:col-span-2">Bio<textarea className="form-control min-h-24" value={draft.profile.bio} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, bio: event.target.value } } : current)} /></label>
-        <button className="neon-button rounded-lg px-5 py-3 font-black md:col-span-2">Salvar usuário</button>
+        <label className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm font-semibold md:col-span-2"><input type="checkbox" checked={draft.active} onChange={(event) => update('active', event.target.checked)} />Usuário ativo</label>
+        {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)] md:col-span-2" role="alert">{error}</p>}
+        <button className="neon-button rounded-lg px-5 py-3 font-black disabled:opacity-60 md:col-span-2" disabled={saving}>{saving ? 'Salvando usuário...' : 'Salvar usuário'}</button>
       </form>
     </Modal>
   );
 }
 
 export function AdminSettingsPage() {
-  const { state } = useAppData();
+  const { state, saveSettings } = useAppData();
+  const [draft, setDraft] = useState(() => structuredClone(state.settings));
   const [saved, setSaved] = useState('');
+  const dirty = JSON.stringify(draft) !== JSON.stringify(state.settings);
   return (
     <>
-      <PageHeader title="Configurações" subtitle="Configuração agrupada por empresa, operação, regras e preços padrão." />
-      <form className="grid gap-4" onSubmit={(event: FormEvent) => { event.preventDefault(); setSaved('Configurações salvas no modo demo.'); }}>
-        <section className="glass-panel rounded-lg p-5">
+      <PageHeader title="Configurações" subtitle="Parâmetros carregados da API em modo leitura; ajustes locais valem apenas nesta sessão." />
+      <div className="mb-4 flex flex-wrap gap-2" aria-label="Seções de configuração">{['Empresa', 'Funcionamento', 'Reservas', 'Preços', 'Pagamentos', 'Notificações', 'Aparência', 'Segurança'].map((item) => <a key={item} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-muted hover:border-neon/35 hover:text-[var(--text)]" href={['Empresa', 'Funcionamento', 'Reservas', 'Preços'].includes(item) ? `#config-${item.toLowerCase()}` : '#config-futuro'}>{item}</a>)}</div>
+      <form className="grid gap-4" onSubmit={(event: FormEvent) => { event.preventDefault(); saveSettings(draft); setSaved('Configurações aplicadas localmente nesta sessão. A API ainda não oferece persistência de alterações.'); }}>
+        <section id="config-empresa" className="glass-panel scroll-mt-24 rounded-lg p-5">
           <SectionTitle title="Empresa" action={<Settings className="h-5 w-5 text-neon" />} />
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2 text-sm font-semibold">Empresa<input className="form-control" defaultValue={state.settings.company} /></label>
-            <label className="grid gap-2 text-sm font-semibold">Funcionamento<input className="form-control" defaultValue={state.settings.hours} /></label>
+            <label className="grid gap-2 text-sm font-semibold">Nome da empresa<input className="form-control" value={draft.company} onChange={(event) => { setDraft((current) => ({ ...current, company: event.target.value })); setSaved(''); }} required aria-label="Nome da empresa" /></label>
+            <label id="config-funcionamento" className="grid scroll-mt-24 gap-2 text-sm font-semibold">Horário geral de funcionamento<input className="form-control" value={draft.hours} onChange={(event) => { setDraft((current) => ({ ...current, hours: event.target.value })); setSaved(''); }} aria-describedby="hours-help" aria-label="Horário geral de funcionamento" /><span id="hours-help" className="text-xs font-normal text-muted">Formato sugerido: 08:00 - 22:00.</span></label>
           </div>
         </section>
-        <section className="glass-panel rounded-lg p-5">
+        <section id="config-reservas" className="glass-panel scroll-mt-24 rounded-lg p-5">
           <SectionTitle title="Regras de reserva" action={<SlidersHorizontal className="h-5 w-5 text-cyan" />} />
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2 text-sm font-semibold">Cancelamento permitido até<input className="form-control" type="number" defaultValue={state.settings.cancelationRuleHours} /></label>
-            <label className="grid gap-2 text-sm font-semibold">Reserva mínima em minutos<input className="form-control" type="number" defaultValue={state.settings.minimumReservationMinutes} /></label>
+            <label className="grid gap-2 text-sm font-semibold">Cancelamento permitido até (horas antes)<input className="form-control" type="number" min={1} max={168} value={draft.cancelationRuleHours} onChange={(event) => { setDraft((current) => ({ ...current, cancelationRuleHours: Number(event.target.value) })); setSaved(''); }} aria-label="Horas mínimas para cancelamento" /></label>
+            <label className="grid gap-2 text-sm font-semibold">Duração mínima da reserva (minutos)<input className="form-control" type="number" min={30} step={30} value={draft.minimumReservationMinutes} onChange={(event) => { setDraft((current) => ({ ...current, minimumReservationMinutes: Number(event.target.value) })); setSaved(''); }} aria-label="Duração mínima da reserva em minutos" /></label>
           </div>
         </section>
-        <section className="glass-panel rounded-lg p-5">
+        <section id="config-preços" className="glass-panel scroll-mt-24 rounded-lg p-5">
           <SectionTitle title="Modalidades e preços" />
           <div className="mb-4 flex flex-wrap gap-2">{state.settings.modalities.map((item) => <span key={item} className="rounded-full border border-line px-3 py-1 text-sm">{item}</span>)}</div>
           <div className="grid gap-3 md:grid-cols-3">
             {state.settings.modalities.map((item) => (
               <label key={item} className="grid gap-2 text-sm font-semibold">
                 {item}
-                <input className="form-control" type="number" defaultValue={state.settings.defaultPrices[item]} />
+                <input className="form-control" type="number" min={0} step={5} value={draft.defaultPrices[item]} onChange={(event) => { setDraft((current) => ({ ...current, defaultPrices: { ...current.defaultPrices, [item]: Number(event.target.value) } })); setSaved(''); }} aria-label={`Preço padrão de ${item}`} />
               </label>
             ))}
           </div>
         </section>
-        {saved && <p className="rounded-lg border border-neon/30 bg-neon/10 p-3 text-sm text-neon">{saved}</p>}
-        <button className="neon-button rounded-lg px-5 py-3 font-black">Salvar configurações</button>
+        <section id="config-futuro" className="soft-panel scroll-mt-24 rounded-lg p-4 text-sm text-muted"><strong className="text-[var(--text)]">Pagamentos, notificações, aparência e segurança</strong><p className="mt-1">Estas áreas permanecem claramente identificadas como próximas etapas e não exibem controles decorativos.</p></section>
+        {saved && <p className="rounded-lg border border-neon/30 bg-neon/10 p-3 text-sm text-neon" role="status">{saved}</p>}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-[var(--surface-elevated)] p-3 shadow-panel lg:sticky lg:bottom-4 lg:z-10"><span className="text-sm text-muted">{dirty ? 'Há alterações não salvas.' : 'Todas as alterações foram salvas.'}</span><div className="flex flex-wrap gap-2"><button className="ghost-button rounded-lg px-4 py-2 text-sm font-bold" type="button" disabled={!dirty} onClick={() => { setDraft(structuredClone(state.settings)); setSaved('Configurações restauradas para a última versão salva.'); }}>Restaurar</button><button className="neon-button rounded-lg px-5 py-2 text-sm font-black" disabled={!dirty}>Salvar configurações</button></div></div>
       </form>
     </>
   );
 }
 
 export function AdminCommunityPage() {
-  const { state, likePost } = useAppData();
+  const { state, likePost, commentPost } = useAppData();
   const [toast, setToast] = useState('');
   return (
     <>
@@ -729,10 +815,10 @@ export function AdminCommunityPage() {
           <div className="grid gap-3">
             {state.posts.map((post) => (
               <article key={post.id} className="app-card p-4">
-                <p><strong>{post.authorName}</strong> {post.content}</p>
+                <div className="flex items-start gap-3"><Avatar name={post.authorName} src={post.avatarUrl ?? state.users.find((item) => item.id === post.authorId)?.profile.photo} size={42} /><p><strong>{post.authorName}</strong> {post.content}</p></div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => likePost(post.id)}>Curtir · {post.likes}</button>
-                  <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => setToast('Comentário demo registrado visualmente.')}>Comentar · {post.comments}</button>
+                  <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => void likePost(post.id)}>Curtir · {post.likes}</button>
+                  <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => { commentPost(post.id); setToast('Comentário demonstrativo adicionado à publicação.'); }}>Comentar · {post.comments}</button>
                   <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={() => { navigator.clipboard?.writeText(post.content); setToast('Publicação copiada.'); }}>Compartilhar</button>
                 </div>
               </article>
@@ -761,27 +847,51 @@ export function AdminCommunityPage() {
 
 export function AdminStatusPage() {
   const [refreshed, setRefreshed] = useState(new Date());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [health, setHealth] = useState<Record<string, unknown>>({ api: 'DEMO', database: 'DEMO', realtime: 'SIMULATED', scheduler: 'DEMO' });
+  const refresh = async () => {
+    const token = tokenFromStorage();
+    setLoading(true);
+    setError('');
+    try {
+      if (!token || token.startsWith('demo-')) throw new Error('API não conectada nesta sessão.');
+      setHealth(await fetchSystemStatus(token));
+      setRefreshed(new Date());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível consultar o status.');
+      setHealth({ api: 'DEMO', database: 'DEMO', realtime: 'SIMULATED', scheduler: 'DEMO' });
+      setRefreshed(new Date());
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { refresh(); }, []);
+  const statusLabel = (value: unknown) => value === 'UP' ? 'Operacional' : value === 'SIMULATED' || value === 'DEMO' ? 'Demonstração' : value === 'DOWN' ? 'Indisponível' : 'Não configurado';
   return (
     <>
-      <PageHeader title="Status do sistema" subtitle="Monitor de saúde demo da API, banco, fila e realtime." action={<button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold" onClick={() => setRefreshed(new Date())}><RefreshCw className="h-4 w-4" />Atualizar</button>} />
-      <div className="grid gap-4 md:grid-cols-4">
+      <PageHeader title="Status do sistema" subtitle="Painel técnico sem exposição de hosts, credenciais ou dados sensíveis." action={<button className="ghost-button inline-flex items-center gap-2 rounded-lg px-4 py-2 font-bold disabled:opacity-60" onClick={refresh} disabled={loading}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />{loading ? 'Verificando...' : 'Atualizar'}</button>} />
+      {error && <p className="mb-4 rounded-lg border border-amber/30 bg-amber/10 p-3 text-sm text-amber" role="status">{error} Exibindo integrações como demonstração.</p>}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ['API', 'Operacional', ShieldCheck],
-          ['Banco de dados', 'Saudável', CheckCircle2],
-          ['Realtime', 'Simulado', Activity],
-          ['Auditoria', 'Ativa', BarChart3]
+          ['API', statusLabel(health.api), ShieldCheck],
+          ['Banco de dados', statusLabel(health.database), CheckCircle2],
+          ['Realtime', statusLabel(health.realtime), Activity],
+          ['Agendador / fila', statusLabel(health.scheduler), BarChart3],
+          ['Frontend', 'Operacional', CheckCircle2],
+          ['Armazenamento', 'Não configurado', ShieldCheck],
+          ['Backup', 'Não configurado', ShieldCheck],
+          ['Auditoria', 'Operacional', BarChart3]
         ].map(([title, status, Icon]) => {
           const StatusIcon = Icon as LucideIcon;
           return (
             <div key={String(title)} className="glass-panel card-hover rounded-lg p-5">
               <StatusIcon className="h-6 w-6 text-neon" />
               <p className="mt-4 text-sm text-muted">{String(title)}</p>
-              <strong>{String(status)}</strong>
+              <span className="mt-2 inline-flex"><StatusBadge status={String(status)} compact /></span>
             </div>
           );
         })}
       </div>
-      <p className="mt-4 text-sm text-muted">Última verificação: {refreshed.toLocaleString('pt-BR')}</p>
+      <div className="mt-4 grid gap-3 rounded-lg border border-line p-4 text-sm sm:grid-cols-3"><p><span className="block text-xs text-muted">Versão</span><strong>1.0.0</strong></p><p><span className="block text-xs text-muted">Ambiente</span><strong>{import.meta.env.MODE}</strong></p><p><span className="block text-xs text-muted">Última verificação</span><strong>{refreshed.toLocaleString('pt-BR')}</strong></p></div>
     </>
   );
 }

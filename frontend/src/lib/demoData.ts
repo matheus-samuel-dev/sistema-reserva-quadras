@@ -385,6 +385,19 @@ export const reviews: Review[] = [
   { id: 'rv-3', userName: 'Beatriz Lima', courtName: 'Studio Tênis', cleaning: 5, lighting: 4, organization: 5, service: 5, courtQuality: 4, average: 4.6, comment: 'Boa quadra coberta e equipe atenciosa.' }
 ];
 
+export const ranking = users
+  .filter((user) => user.role === 'CLIENTE')
+  .map((user) => ({
+    id: user.id,
+    name: user.name,
+    city: user.profile.city,
+    favoriteModality: user.profile.favoriteModality,
+    reservations: user.profile.reservationsDone,
+    hours: user.profile.hoursOnCourt,
+    attendanceRate: user.profile.attendanceRate
+  }))
+  .sort((a, b) => b.hours - a.hours);
+
 export const settings: Settings = {
   company: 'PlaySpace Club',
   hours: '08:00 - 22:00',
@@ -413,6 +426,7 @@ export const initialState: PlaySpaceState = {
   partnerAds,
   championships,
   reviews,
+  ranking,
   settings,
   preferences: {
     theme: 'dark',

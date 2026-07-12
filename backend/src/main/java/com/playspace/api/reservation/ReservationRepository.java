@@ -6,8 +6,11 @@ import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
     Optional<Reservation> findByCode(String code);
@@ -15,6 +18,12 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findByClientIdOrderByDateDescStartTimeDesc(Long clientId);
 
     List<Reservation> findByDateBetweenOrderByDateAscStartTimeAsc(LocalDate start, LocalDate end);
+
+    List<Reservation> findByDateBetweenAndStatusInOrderByDateAscStartTimeAsc(
+            LocalDate start,
+            LocalDate end,
+            Collection<ReservationStatus> statuses
+    );
 
     long countByDateAndStatusNot(LocalDate date, ReservationStatus status);
 
@@ -29,6 +38,29 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             LocalTime endTime,
             LocalTime startTime
     );
+
+    @Query("""
+            select case when count(r) > 0 then true else false end
+            from Reservation r
+            where r.court.id = :courtId
+              and r.date = :date
+              and r.status in :statuses
+              and r.startTime < :endTime
+              and r.endTime > :startTime
+              and r.id <> :excludedId
+            """)
+    boolean existsConflictExcluding(
+            @Param("courtId") Long courtId,
+            @Param("date") LocalDate date,
+            @Param("statuses") Collection<ReservationStatus> statuses,
+            @Param("endTime") LocalTime endTime,
+            @Param("startTime") LocalTime startTime,
+            @Param("excludedId") Long excludedId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Reservation r where r.id = :id")
+    Optional<Reservation> findByIdForUpdate(@Param("id") Long id);
 
     @Query("""
             select r from Reservation r

@@ -31,9 +31,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var email = jwtService.subject(token);
                 if (email != null && SecurityContextHolder.getContext().getAuthentication() == null && jwtService.valid(token)) {
                     var details = userDetailsService.loadUserByUsername(email);
-                    var auth = new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities());
-                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(auth);
+                    if (details.isEnabled() && details.isAccountNonExpired()
+                            && details.isAccountNonLocked() && details.isCredentialsNonExpired()) {
+                        var auth = new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities());
+                        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(auth);
+                    }
                 }
             } catch (RuntimeException ignored) {
                 SecurityContextHolder.clearContext();

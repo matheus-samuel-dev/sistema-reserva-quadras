@@ -1,5 +1,6 @@
 package com.playspace.api.community;
 
+import com.playspace.api.common.NotFoundException;
 import com.playspace.api.security.CurrentUserService;
 import com.playspace.api.user.UserRepository;
 import java.util.Comparator;
@@ -43,41 +44,51 @@ public class CommunityController {
     }
 
     @GetMapping("/feed")
-    List<CommunityPost> feed() {
-        return posts.findTop20ByOrderByCreatedAtDesc();
+    List<CommunityPostResponse> feed() {
+        return posts.findTop20ByOrderByCreatedAtDesc().stream()
+                .map(CommunityPostResponse::from)
+                .toList();
     }
 
     @PostMapping("/feed/{id}/like")
-    CommunityPost like(@PathVariable Long id) {
-        var post = posts.findById(id).orElseThrow();
+    CommunityPostResponse like(@PathVariable Long id) {
+        var post = posts.findById(id).orElseThrow(() -> new NotFoundException("Publicacao nao encontrada."));
         post.setLikes(post.getLikes() + 1);
-        return posts.save(post);
+        return CommunityPostResponse.from(posts.save(post));
     }
 
     @GetMapping("/partners")
-    List<PartnerAd> partners() {
-        return partnerAds.findTop20ByOrderByCreatedAtDesc();
+    List<PartnerAdResponse> partners() {
+        return partnerAds.findTop20ByOrderByCreatedAtDesc().stream()
+                .map(PartnerAdResponse::from)
+                .toList();
     }
 
     @GetMapping("/championships")
-    List<Championship> championshipList() {
-        return championships.findTop12ByOrderByStartDateAsc();
+    List<ChampionshipResponse> championshipList() {
+        return championships.findTop12ByOrderByStartDateAsc().stream()
+                .map(ChampionshipResponse::from)
+                .toList();
     }
 
     @PostMapping("/championships/{id}/enroll")
     Map<String, String> enroll(@PathVariable Long id) {
-        var championship = championships.findById(id).orElseThrow();
+        var championship = championships.findById(id).orElseThrow(() -> new NotFoundException("Campeonato nao encontrado."));
         return Map.of("message", currentUser.user().getName() + " inscrito em " + championship.getName() + " (demo).");
     }
 
     @GetMapping("/achievements/my")
-    List<Achievement> myAchievements() {
-        return achievements.findByUserIdOrderByPercentCompleteDesc(currentUser.user().getId());
+    List<AchievementResponse> myAchievements() {
+        return achievements.findByUserIdOrderByPercentCompleteDesc(currentUser.user().getId()).stream()
+                .map(AchievementResponse::from)
+                .toList();
     }
 
     @GetMapping("/reviews")
-    List<Review> latestReviews() {
-        return reviews.findTop10ByOrderByCreatedAtDesc();
+    List<ReviewResponse> latestReviews() {
+        return reviews.findTop10ByOrderByCreatedAtDesc().stream()
+                .map(ReviewResponse::from)
+                .toList();
     }
 
     @GetMapping("/ranking")
@@ -99,7 +110,7 @@ public class CommunityController {
 
     @PostMapping("/championships")
     @PreAuthorize("hasRole('ADMIN')")
-    Championship createChampionship(@RequestBody Championship championship) {
-        return championships.save(championship);
+    ChampionshipResponse createChampionship(@RequestBody Championship championship) {
+        return ChampionshipResponse.from(championships.save(championship));
     }
 }

@@ -3,18 +3,18 @@ export default {
     theme: {
         extend: {
             colors: {
-                pitch: '#070b10',
-                panel: '#0b1117',
-                panelSoft: '#101923',
-                line: 'rgba(148, 163, 184, 0.16)',
-                neon: '#7CFF4F',
-                mint: '#42E695',
-                cyan: '#55D6FF',
-                amber: '#FFB84D'
+                pitch: 'var(--bg)',
+                panel: 'var(--panel)',
+                panelSoft: 'var(--panel-soft)',
+                line: 'var(--line)',
+                neon: 'rgb(var(--primary-rgb) / <alpha-value>)',
+                mint: 'rgb(var(--success-rgb) / <alpha-value>)',
+                cyan: 'rgb(var(--info-rgb) / <alpha-value>)',
+                amber: 'rgb(var(--warning-rgb) / <alpha-value>)'
             },
             boxShadow: {
-                glow: '0 0 32px rgba(124, 255, 79, 0.16)',
-                panel: '0 20px 80px rgba(0, 0, 0, 0.35)'
+                glow: '0 0 32px rgb(var(--primary-rgb) / 0.16)',
+                panel: 'var(--shadow-panel)'
             },
             fontFamily: {
                 sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'sans-serif']

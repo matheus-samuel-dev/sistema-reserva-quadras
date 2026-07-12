@@ -1,6 +1,6 @@
 import { Dumbbell } from 'lucide-react';
 
-export function Logo({ compact = false }: { compact?: boolean }) {
+export function Logo({ compact = false, onDark = false }: { compact?: boolean; onDark?: boolean }) {
   return (
     <div className="flex items-center gap-3">
       <div className="grid h-10 w-10 place-items-center rounded-full border border-neon/30 bg-neon/10 shadow-glow">
@@ -8,8 +8,8 @@ export function Logo({ compact = false }: { compact?: boolean }) {
       </div>
       {!compact && (
         <div className="leading-tight">
-          <p className="text-lg font-black tracking-normal text-[var(--text)]">PlaySpace</p>
-          <p className="text-xs font-medium text-muted">Reservas de Quadras</p>
+          <p className={`text-lg font-black tracking-normal ${onDark ? 'text-white' : 'text-[var(--text)]'}`}>PlaySpace</p>
+          <p className={`text-xs font-medium ${onDark ? 'text-slate-300' : 'text-muted'}`}>Reservas de Quadras</p>
         </div>
       )}
     </div>

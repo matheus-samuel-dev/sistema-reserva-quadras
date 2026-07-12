@@ -27,9 +27,10 @@ describe('PlaySpace frontend', () => {
     const user = userEvent.setup();
     renderApp();
 
+    await user.click((await screen.findAllByRole('button', { name: /preencher acesso de administrador/i }))[0]);
     await user.click(screen.getByRole('button', { name: /entrar/i }));
 
-    expect(await screen.findByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /dashboard/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText(/reservas hoje/i)).toBeInTheDocument();
     expect(screen.getByText(/receita do mês/i)).toBeInTheDocument();
   });
@@ -38,9 +39,9 @@ describe('PlaySpace frontend', () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(screen.getByRole('button', { name: /usar cliente/i }));
+    await user.click((await screen.findAllByRole('button', { name: /preencher acesso de cliente/i }))[0]);
     await user.click(screen.getByRole('button', { name: /entrar/i }));
-    await user.click((await screen.findAllByRole('link', { name: /reservas/i }))[0]);
+    await user.click((await screen.findAllByRole('link', { name: /reservas/i }, { timeout: 5000 }))[0]);
 
     expect(await screen.findByRole('heading', { name: /minhas reservas/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^próximas$/i })).toBeInTheDocument();
@@ -50,14 +51,15 @@ describe('PlaySpace frontend', () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(screen.getByRole('button', { name: /usar cliente/i }));
+    await user.click((await screen.findAllByRole('button', { name: /preencher acesso de cliente/i }))[0]);
     await user.click(screen.getByRole('button', { name: /entrar/i }));
-    await user.click((await screen.findAllByRole('link', { name: /nova/i }))[0]);
+    await user.click((await screen.findAllByRole('link', { name: /nova/i }, { timeout: 5000 }))[0]);
 
     const future = new Date();
     future.setDate(future.getDate() + 30);
-    await user.clear(screen.getByLabelText(/data/i));
-    await user.type(screen.getByLabelText(/data/i), future.toISOString().slice(0, 10));
+    const dateInput = await screen.findByLabelText(/data/i, {}, { timeout: 5000 });
+    await user.clear(dateInput);
+    await user.type(dateInput, future.toISOString().slice(0, 10));
     await user.click(screen.getByRole('button', { name: /criar reserva/i }));
 
     expect(await screen.findByRole('heading', { name: /pagamento da reserva/i })).toBeInTheDocument();

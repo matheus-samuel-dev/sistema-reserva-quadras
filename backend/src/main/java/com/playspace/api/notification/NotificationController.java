@@ -1,5 +1,6 @@
 package com.playspace.api.notification;
 
+import com.playspace.api.common.NotFoundException;
 import com.playspace.api.security.CurrentUserService;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,7 +33,8 @@ public class NotificationController {
 
     @PutMapping("/{id}/read")
     Notification markRead(@PathVariable Long id) {
-        var notification = notifications.findById(id).orElseThrow();
+        var notification = notifications.findByIdAndUserId(id, currentUser.user().getId())
+                .orElseThrow(() -> new NotFoundException("Notificacao nao encontrada."));
         notification.setRead(true);
         return notifications.save(notification);
     }

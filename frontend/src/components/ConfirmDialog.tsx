@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
 import { Modal } from './Modal';
 
 export function ConfirmDialog({
@@ -17,9 +18,11 @@ export function ConfirmDialog({
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: 'danger' | 'success';
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   return (
     <Modal title={title} open={open} onClose={onClose} maxWidth="max-w-lg">
       <div className="grid gap-4">
@@ -29,16 +32,25 @@ export function ConfirmDialog({
             <p className="text-sm text-muted">{description}</p>
           </div>
         </div>
+        {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
         <div className="flex flex-wrap justify-end gap-2">
-          <button className="ghost-button rounded-lg px-4 py-2 text-sm font-bold" type="button" onClick={onClose}>
+          <button className="ghost-button rounded-lg px-4 py-2 text-sm font-bold" type="button" onClick={onClose} disabled={submitting}>
             {cancelLabel}
           </button>
           <button
-            className={`rounded-lg px-4 py-2 text-sm font-black ${tone === 'danger' ? 'border border-rose-400/35 bg-rose-400/15 text-rose-100 hover:bg-rose-400/20' : 'neon-button'}`}
+            className={`rounded-lg px-4 py-2 text-sm font-black disabled:opacity-60 ${tone === 'danger' ? 'border border-rose-400/35 bg-rose-400/15 text-[var(--danger)] hover:bg-rose-400/20' : 'neon-button'}`}
             type="button"
-            onClick={onConfirm}
+            disabled={submitting}
+            onClick={async () => {
+              if (submitting) return;
+              setSubmitting(true);
+              setError('');
+              try { await onConfirm(); }
+              catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível concluir a ação.'); }
+              finally { setSubmitting(false); }
+            }}
           >
-            {confirmLabel}
+            {submitting ? 'Processando...' : confirmLabel}
           </button>
         </div>
       </div>

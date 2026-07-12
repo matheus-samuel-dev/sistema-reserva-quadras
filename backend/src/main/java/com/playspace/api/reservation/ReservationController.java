@@ -47,11 +47,20 @@ public class ReservationController {
     }
 
     @GetMapping("/week")
+    @PreAuthorize("hasRole('ADMIN')")
     List<Reservation> week(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end
     ) {
         return reservations.findByDateBetweenOrderByDateAscStartTimeAsc(start, end);
+    }
+
+    @GetMapping("/availability")
+    List<ReservationAvailability> availability(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end
+    ) {
+        return service.availability(start, end);
     }
 
     @PostMapping

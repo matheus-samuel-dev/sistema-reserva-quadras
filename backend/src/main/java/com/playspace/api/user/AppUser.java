@@ -47,7 +47,10 @@ public class AppUser extends AuditableEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(length = 255)
     private String avatarUrl;
+
+    @Column(length = 255)
     private String bio;
     private String city;
     private LocalDate memberSince;

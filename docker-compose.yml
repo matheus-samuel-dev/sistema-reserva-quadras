@@ -37,14 +37,15 @@ services:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/playspace}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-playspace}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-playspace}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
 
       JWT_SECRET: ${JWT_SECRET:-playspace-production-change-me-secret-with-at-least-256-bits}
-      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-720}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-120}
 
-      CORS_ALLOWED_ORIGINS: "https://playspace.15-228-45-207.sslip.io"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3002}
       
     ports:
-      - "127.0.0.1:28080:8080"
+      - "127.0.0.1:${BACKEND_HOST_PORT:-28080}:8080"
 
   frontend:
     build:
@@ -59,7 +60,7 @@ services:
       - backend
 
     ports:
-      - "127.0.0.1:3002:80"
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3002}:80"
 
 volumes:
   postgres-data:
