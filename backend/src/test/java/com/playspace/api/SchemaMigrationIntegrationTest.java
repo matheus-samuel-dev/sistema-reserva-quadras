@@ -18,7 +18,7 @@ class SchemaMigrationIntegrationTest {
 
     @Test
     void flywayMigratesTheCompleteSchemaBeforeHibernateValidation() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("1");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("5");
 
         var tables = jdbc.queryForList(
                 """
@@ -39,8 +39,19 @@ class SchemaMigrationIntegrationTest {
                 "notification",
                 "activity_log",
                 "community_post",
+                "community_comment",
+                "community_post_like",
                 "partner_ad",
+                "sports_profile",
+                "sports_profile_region",
+                "sports_profile_modality",
+                "sports_availability",
+                "partner_interest",
                 "championship",
+                "championship_event",
+                "championship_enrollment",
+                "user_preferences",
+                "platform_settings",
                 "achievement",
                 "review",
                 "flyway_schema_history"

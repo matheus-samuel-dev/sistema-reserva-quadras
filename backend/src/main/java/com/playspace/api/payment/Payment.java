@@ -38,6 +38,7 @@ public class Payment extends AuditableEntity {
 
     private String transactionCode;
     private OffsetDateTime paidAt;
+    private OffsetDateTime refundedAt;
 
     public Long getId() {
         return id;
@@ -93,5 +94,13 @@ public class Payment extends AuditableEntity {
 
     public void setPaidAt(OffsetDateTime paidAt) {
         this.paidAt = paidAt;
+    }
+
+    public OffsetDateTime getRefundedAt() {
+        return refundedAt;
+    }
+
+    public void setRefundedAt(OffsetDateTime refundedAt) {
+        this.refundedAt = refundedAt;
     }
 }

@@ -432,11 +432,11 @@ export function LandingPage() {
           <div>
             <h2 className="text-sm font-black uppercase text-neon">Navegação</h2>
             <nav className="mt-4 grid gap-3 text-sm text-muted" aria-label="Navegação do rodapé">
-              <a className="hover:text-[var(--text)]" href="#quadras">Quadras</a>
-              <a className="hover:text-[var(--text)]" href="#comunidade">Comunidade</a>
-              <a className="hover:text-[var(--text)]" href="#campeonatos">Campeonatos</a>
-              <a className="hover:text-[var(--text)]" href="#faq">FAQ</a>
-              <Link className="font-bold text-neon" to="/login">Acesso demo</Link>
+              <a className="flex min-h-11 items-center rounded-md hover:text-[var(--text)] sm:min-h-0" href="#quadras">Quadras</a>
+              <a className="flex min-h-11 items-center rounded-md hover:text-[var(--text)] sm:min-h-0" href="#comunidade">Comunidade</a>
+              <a className="flex min-h-11 items-center rounded-md hover:text-[var(--text)] sm:min-h-0" href="#campeonatos">Campeonatos</a>
+              <a className="flex min-h-11 items-center rounded-md hover:text-[var(--text)] sm:min-h-0" href="#faq">FAQ</a>
+              <Link className="flex min-h-11 items-center rounded-md font-bold text-neon sm:min-h-0" to="/login">Acesso demo</Link>
             </nav>
           </div>
           <div>

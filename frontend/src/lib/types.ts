@@ -9,6 +9,8 @@ export interface UserProfile {
   photo: string;
   bio: string;
   city: string;
+  phone?: string;
+  availability?: string;
   memberSince: string;
   favoriteModality: Modality;
   sports: Modality[];
@@ -74,6 +76,7 @@ export interface Payment {
   amount: number;
   transactionCode: string;
   paidAt?: string;
+  refundedAt?: string;
 }
 
 export interface NotificationItem {
@@ -112,9 +115,26 @@ export interface CommunityPost {
   avatarUrl?: string;
   content: string;
   type: string;
+  modality?: Modality;
   likes: number;
   comments: number;
+  likedByCurrentUser?: boolean;
+  likedByUserIds?: string[];
+  commentItems?: CommunityComment[];
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  avatarUrl?: string;
+  content: string;
+  editable?: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface PartnerAd {
@@ -140,11 +160,105 @@ export interface Championship {
   prize: string;
   status: string;
   bracket: string[];
+  description?: string;
+  courtId?: string;
+  courtName?: string;
+  location?: string;
+  city?: string;
+  endDate?: string;
+  registrationDeadline?: string;
+  maxParticipants?: number;
+  enrolledParticipants?: number;
+  availableSpots?: number;
+  format?: string;
+  registrationFee?: number;
+  imageUrl?: string;
+  currentUserEnrolled?: boolean;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ChampionshipEnrollment {
+  id: string;
+  championshipId: string;
+  championshipName: string;
+  playerId: string;
+  playerName: string;
+  playerAvatarUrl?: string;
+  status: 'ATIVA' | 'CANCELADA';
+  enrolledAt: string;
+  cancelledAt?: string;
+}
+
+export type SportsLevel = 'INICIANTE' | 'INTERMEDIARIO' | 'AVANCADO' | 'COMPETITIVO';
+export type PartnerObjective = 'TREINO' | 'JOGO_CASUAL' | 'COMPETICAO' | 'ENCONTRAR_TIME';
+export type PartnerInterestStatus = 'PENDENTE' | 'ACEITO' | 'RECUSADO' | 'CANCELADO';
+export type WeekDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+
+export interface SportsProfileModality {
+  modality: Modality;
+  level: SportsLevel;
+  primary: boolean;
+}
+
+export interface SportsAvailability {
+  dayOfWeek: WeekDay;
+  startTime: string;
+  endTime: string;
+}
+
+export interface SportsProfile {
+  id: string;
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  city: string;
+  regions: string[];
+  primaryModality: Modality;
+  modalities: SportsProfileModality[];
+  availabilities: SportsAvailability[];
+  objective: PartnerObjective;
+  presentation: string;
+  position?: string;
+  discoverable: boolean;
+  currentInterestId?: string;
+  currentInterestStatus?: PartnerInterestStatus;
+  currentInterestDirection?: 'ENVIADOS' | 'RECEBIDOS';
+}
+
+export interface PartnerInterest {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl?: string;
+  receiverId: string;
+  receiverName: string;
+  receiverAvatarUrl?: string;
+  status: PartnerInterestStatus;
+  message?: string;
+  contactEmail?: string;
+  createdAt: string;
+  respondedAt?: string;
+  cancelledAt?: string;
+}
+
+export interface UserPreferences {
+  theme: 'LIGHT' | 'DARK' | 'SYSTEM';
+  notificationsEnabled: boolean;
+  reservationReminderHours: number;
+  emailNotifications: boolean;
+  browserNotifications: boolean;
+  defaultCity: string;
+  favoriteModalities: Modality[];
+  preferredTimes: string;
+  privateProfile: boolean;
+  discoverableByPartners: boolean;
+  language: 'pt-BR' | 'en-US' | 'es-ES';
 }
 
 export interface Review {
   id: string;
+  reservationId?: string;
   userName: string;
   avatarUrl?: string;
   courtName: string;
@@ -166,6 +280,8 @@ export interface RankingEntry {
   reservations: number;
   hours: number;
   attendanceRate: number;
+  points: number;
+  achievements: number;
 }
 
 export interface Settings {
@@ -175,6 +291,31 @@ export interface Settings {
   minimumReservationMinutes: number;
   modalities: Modality[];
   defaultPrices: Record<Modality, number>;
+  legalName?: string;
+  document?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  address?: string;
+  timezone?: string;
+  openingTime?: string;
+  closingTime?: string;
+  operatingDays?: WeekDay[];
+  maximumAdvanceDays?: number;
+  slotMinutes?: number;
+  acceptPix?: boolean;
+  acceptCard?: boolean;
+  acceptCash?: boolean;
+  pixKey?: string;
+  emailNotifications?: boolean;
+  browserNotifications?: boolean;
+  reservationReminderHours?: number;
+  primaryColor?: string;
+  logoUrl?: string;
+  defaultTheme?: 'LIGHT' | 'DARK' | 'SYSTEM';
+  minimumPasswordLength?: number;
+  sessionMinutes?: number;
+  requireStrongPassword?: boolean;
+  publicRegistrationEnabled?: boolean;
 }
 
 export interface PlaySpaceState {
@@ -187,10 +328,14 @@ export interface PlaySpaceState {
   achievements: Record<string, Achievement[]>;
   posts: CommunityPost[];
   partnerAds: PartnerAd[];
+  sportsProfiles: SportsProfile[];
+  partnerInterests: PartnerInterest[];
   championships: Championship[];
+  championshipEnrollments: ChampionshipEnrollment[];
   reviews: Review[];
   ranking: RankingEntry[];
   settings: Settings;
+  userPreferences: Record<string, UserPreferences>;
   preferences: {
     theme: 'dark' | 'light';
     favoriteModalities: Modality[];

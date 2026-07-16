@@ -2,59 +2,53 @@ package com.playspace.api.community;
 
 import com.playspace.api.common.NotFoundException;
 import com.playspace.api.security.CurrentUserService;
+import com.playspace.api.court.Modality;
+import com.playspace.api.reservation.ReservationRepository;
+import com.playspace.api.reservation.ReservationStatus;
 import com.playspace.api.user.UserRepository;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/community")
 public class CommunityController {
-    private final CommunityPostRepository posts;
     private final PartnerAdRepository partnerAds;
     private final ChampionshipRepository championships;
     private final AchievementRepository achievements;
     private final ReviewRepository reviews;
+    private final ReviewService reviewService;
     private final UserRepository users;
     private final CurrentUserService currentUser;
+    private final ReservationRepository reservations;
 
     public CommunityController(
-            CommunityPostRepository posts,
             PartnerAdRepository partnerAds,
             ChampionshipRepository championships,
             AchievementRepository achievements,
             ReviewRepository reviews,
+            ReviewService reviewService,
             UserRepository users,
-            CurrentUserService currentUser
+            CurrentUserService currentUser,
+            ReservationRepository reservations
     ) {
-        this.posts = posts;
         this.partnerAds = partnerAds;
         this.championships = championships;
         this.achievements = achievements;
         this.reviews = reviews;
+        this.reviewService = reviewService;
         this.users = users;
         this.currentUser = currentUser;
-    }
-
-    @GetMapping("/feed")
-    List<CommunityPostResponse> feed() {
-        return posts.findTop20ByOrderByCreatedAtDesc().stream()
-                .map(CommunityPostResponse::from)
-                .toList();
-    }
-
-    @PostMapping("/feed/{id}/like")
-    CommunityPostResponse like(@PathVariable Long id) {
-        var post = posts.findById(id).orElseThrow(() -> new NotFoundException("Publicacao nao encontrada."));
-        post.setLikes(post.getLikes() + 1);
-        return CommunityPostResponse.from(posts.save(post));
+        this.reservations = reservations;
     }
 
     @GetMapping("/partners")
@@ -72,8 +66,8 @@ public class CommunityController {
     }
 
     @PostMapping("/championships/{id}/enroll")
-    Map<String, String> enroll(@PathVariable Long id) {
-        var championship = championships.findById(id).orElseThrow(() -> new NotFoundException("Campeonato nao encontrado."));
+    Map<String, String> enroll(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        var championship = championships.findById(id).orElseThrow(() -> new NotFoundException("Campeonato não encontrado."));
         return Map.of("message", currentUser.user().getName() + " inscrito em " + championship.getName() + " (demo).");
     }
 
@@ -91,20 +85,44 @@ public class CommunityController {
                 .toList();
     }
 
+    @PostMapping("/reviews")
+    @PreAuthorize("hasRole('CLIENTE')")
+    ReviewResponse createReview(@Valid @RequestBody ReviewRequest request) {
+        return ReviewResponse.from(reviewService.create(request));
+    }
+
     @GetMapping("/ranking")
-    List<Map<String, Object>> ranking() {
+    List<RankingResponse> ranking(
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            @RequestParam(required = false) Modality modality
+    ) {
+        var today = LocalDate.now();
+        var start = switch (period.toUpperCase()) {
+            case "WEEKLY" -> today.minusDays(6);
+            case "ANNUAL" -> today.withDayOfYear(1);
+            default -> today.withDayOfMonth(1);
+        };
+        var eligibleReservations = reservations.findAll().stream()
+                .filter(item -> !item.getDate().isBefore(start) && !item.getDate().isAfter(today))
+                .filter(item -> item.getStatus() != ReservationStatus.CANCELADA && item.getStatus() != ReservationStatus.PENDENTE)
+                .filter(item -> modality == null || item.getModality() == modality)
+                .toList();
         return users.findAll().stream()
                 .filter(user -> user.getRole().name().equals("CLIENTE"))
-                .sorted(Comparator.comparingDouble(user -> -user.getHoursOnCourt()))
-                .map(user -> Map.<String, Object>of(
-                        "id", user.getId(),
-                        "name", user.getName(),
-                        "city", user.getCity(),
-                        "favoriteModality", user.getFavoriteModality(),
-                        "reservations", user.getReservationsDone(),
-                        "hours", user.getHoursOnCourt(),
-                        "attendanceRate", user.getAttendanceRate()
-                ))
+                .map(user -> {
+                    var playerReservations = eligibleReservations.stream()
+                            .filter(item -> item.getClient().getId().equals(user.getId()))
+                            .toList();
+                    var hours = playerReservations.stream()
+                            .mapToLong(item -> java.time.Duration.between(item.getStartTime(), item.getEndTime()).toMinutes())
+                            .sum() / 60.0;
+                    var unlocked = achievements.findByUserIdOrderByPercentCompleteDesc(user.getId()).stream()
+                            .filter(item -> item.getPercentComplete() >= 100)
+                            .count();
+                    var points = playerReservations.size() * 100L + Math.round(hours * 20) + unlocked * 250L;
+                    return new RankingResponse(user.getId(), user.getName(), user.getCity(), user.getFavoriteModality(), playerReservations.size(), hours, user.getAttendanceRate(), points, unlocked);
+                })
+                .sorted(Comparator.comparingLong(RankingResponse::points).reversed().thenComparing(RankingResponse::name))
                 .toList();
     }
 

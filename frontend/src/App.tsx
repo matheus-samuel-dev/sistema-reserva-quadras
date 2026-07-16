@@ -6,28 +6,30 @@ import { AppShell } from './layouts/AppShell';
 const adminPages = () => import('./features/admin/AdminPages');
 const clientPages = () => import('./features/client/ClientPages');
 const systemPages = () => import('./features/system/SystemPages');
+const accountPages = () => import('./features/account/AccountPages');
 
 const AdminAgendaPage = lazy(() => adminPages().then((module) => ({ default: module.AdminAgendaPage })));
-const AdminCommunityPage = lazy(() => adminPages().then((module) => ({ default: module.AdminCommunityPage })));
 const AdminCourtsPage = lazy(() => adminPages().then((module) => ({ default: module.AdminCourtsPage })));
 const AdminDashboard = lazy(() => adminPages().then((module) => ({ default: module.AdminDashboard })));
 const AdminPaymentsPage = lazy(() => adminPages().then((module) => ({ default: module.AdminPaymentsPage })));
 const AdminReportsPage = lazy(() => adminPages().then((module) => ({ default: module.AdminReportsPage })));
 const AdminReservationsPage = lazy(() => adminPages().then((module) => ({ default: module.AdminReservationsPage })));
-const AdminSettingsPage = lazy(() => adminPages().then((module) => ({ default: module.AdminSettingsPage })));
 const AdminStatusPage = lazy(() => adminPages().then((module) => ({ default: module.AdminStatusPage })));
 const AdminUsersPage = lazy(() => adminPages().then((module) => ({ default: module.AdminUsersPage })));
 const LoginPage = lazy(() => import('./features/auth/LoginPage').then((module) => ({ default: module.LoginPage })));
+const RegisterPage = lazy(() => import('./features/auth/RegisterPage').then((module) => ({ default: module.RegisterPage })));
+const CommunityPage = lazy(() => import('./features/community/CommunityPage').then((module) => ({ default: module.CommunityPage })));
+const ChampionshipsPage = lazy(() => import('./features/championships/ChampionshipsPage').then((module) => ({ default: module.ChampionshipsPage })));
+const PartnersPage = lazy(() => import('./features/partners/PartnersPage').then((module) => ({ default: module.PartnersPage })));
+const ProfilePage = lazy(() => accountPages().then((module) => ({ default: module.ProfilePage })));
+const PreferencesPage = lazy(() => accountPages().then((module) => ({ default: module.PreferencesPage })));
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const ClientAgendaPage = lazy(() => clientPages().then((module) => ({ default: module.ClientAgendaPage })));
 const ClientAiPage = lazy(() => clientPages().then((module) => ({ default: module.ClientAiPage })));
-const ClientChampionshipsPage = lazy(() => clientPages().then((module) => ({ default: module.ClientChampionshipsPage })));
-const ClientCommunityPage = lazy(() => clientPages().then((module) => ({ default: module.ClientCommunityPage })));
 const ClientCourtsPage = lazy(() => clientPages().then((module) => ({ default: module.ClientCourtsPage })));
 const ClientHomePage = lazy(() => clientPages().then((module) => ({ default: module.ClientHomePage })));
 const ClientNewReservationPage = lazy(() => clientPages().then((module) => ({ default: module.ClientNewReservationPage })));
-const ClientPartnersPage = lazy(() => clientPages().then((module) => ({ default: module.ClientPartnersPage })));
 const ClientPaymentsPage = lazy(() => clientPages().then((module) => ({ default: module.ClientPaymentsPage })));
-const ClientProfilePage = lazy(() => clientPages().then((module) => ({ default: module.ClientProfilePage })));
 const ClientRankingPage = lazy(() => clientPages().then((module) => ({ default: module.ClientRankingPage })));
 const ClientReservationsPage = lazy(() => clientPages().then((module) => ({ default: module.ClientReservationsPage })));
 const ClientStatsPage = lazy(() => clientPages().then((module) => ({ default: module.ClientStatsPage })));
@@ -58,6 +60,7 @@ export function App() {
       <Routes>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/cadastro" element={<RegisterPage />} />
       <Route path="/403" element={<ForbiddenPage />} />
       <Route path="/500" element={<ServerErrorPage />} />
       <Route path="/offline" element={<OfflinePage />} />
@@ -75,10 +78,13 @@ export function App() {
         <Route path="quadras" element={<AdminCourtsPage />} />
         <Route path="agenda" element={<AdminAgendaPage />} />
         <Route path="pagamentos" element={<AdminPaymentsPage />} />
-        <Route path="comunidade" element={<AdminCommunityPage />} />
+        <Route path="comunidade" element={<CommunityPage />} />
+        <Route path="campeonatos" element={<ChampionshipsPage />} />
         <Route path="usuarios" element={<AdminUsersPage />} />
         <Route path="relatorios" element={<AdminReportsPage />} />
-        <Route path="configuracoes" element={<AdminSettingsPage />} />
+        <Route path="configuracoes" element={<SettingsPage />} />
+        <Route path="perfil" element={<ProfilePage />} />
+        <Route path="preferencias" element={<PreferencesPage />} />
         <Route path="status" element={<AdminStatusPage />} />
       </Route>
       <Route
@@ -95,12 +101,13 @@ export function App() {
         <Route path="quadras" element={<ClientCourtsPage />} />
         <Route path="agenda" element={<ClientAgendaPage />} />
         <Route path="pagamentos" element={<ClientPaymentsPage />} />
-        <Route path="perfil" element={<ClientProfilePage />} />
+        <Route path="perfil" element={<ProfilePage />} />
+        <Route path="preferencias" element={<PreferencesPage />} />
         <Route path="estatisticas" element={<ClientStatsPage />} />
-        <Route path="comunidade" element={<ClientCommunityPage />} />
+        <Route path="comunidade" element={<CommunityPage />} />
         <Route path="ranking" element={<ClientRankingPage />} />
-        <Route path="parceiros" element={<ClientPartnersPage />} />
-        <Route path="campeonatos" element={<ClientChampionshipsPage />} />
+        <Route path="parceiros" element={<PartnersPage />} />
+        <Route path="campeonatos" element={<ChampionshipsPage />} />
         <Route path="ai" element={<ClientAiPage />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />

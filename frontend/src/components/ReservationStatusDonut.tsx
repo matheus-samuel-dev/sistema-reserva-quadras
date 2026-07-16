@@ -23,7 +23,7 @@ export function ReservationStatusDonut({ data }: { data: ReservationStatusDatum[
 
   return (
     <figure aria-label={`Reservas por status. Total de ${total} reservas.`}>
-      <div className="relative mx-auto h-72 max-w-sm">
+      <div className="relative mx-auto h-52 max-w-xs sm:h-56">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart margin={{ top: 12, right: 20, bottom: 12, left: 20 }}>
             <Pie
@@ -46,12 +46,12 @@ export function ReservationStatusDonut({ data }: { data: ReservationStatusDatum[
           <div><strong className="metric-value block text-3xl font-black">{total}</strong><span className="text-xs font-semibold text-muted">reservas</span></div>
         </div>
       </div>
-      <figcaption className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+      <figcaption className="mt-3 grid grid-cols-2 gap-2">
         {ordered.map((item) => {
           const meta = getStatusMeta(item.name);
           const percentage = total ? Math.round((item.value / total) * 100) : 0;
           return (
-            <div key={item.name} className="flex items-center gap-2 rounded-lg border border-line bg-[var(--surface-1)] px-3 py-2 text-xs">
+            <div key={item.name} className="flex min-w-0 items-center gap-2 rounded-lg border border-line bg-[var(--surface-1)] px-2.5 py-2 text-xs">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: meta.chartColor }} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate font-semibold">{item.name}</span>
               <strong className="metric-value">{item.value}</strong>

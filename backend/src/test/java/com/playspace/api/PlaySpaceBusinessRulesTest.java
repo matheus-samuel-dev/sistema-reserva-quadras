@@ -56,7 +56,7 @@ class PlaySpaceBusinessRulesTest {
         var response = authService.login(new LoginRequest("admin@playspace.com", "Admin@123"));
 
         assertThat(response.token()).isNotBlank();
-        assertThat(response.user().getRole()).isEqualTo(Role.ADMIN);
+        assertThat(response.user().role()).isEqualTo(Role.ADMIN);
     }
 
     @Test
@@ -86,14 +86,14 @@ class PlaySpaceBusinessRulesTest {
         var client = users.findByEmail("cliente@playspace.com").orElseThrow();
         var court = courts.findByStatus(CourtStatus.DISPONIVEL).get(0);
         var date = LocalDate.now().plusDays(41);
-        var first = new ReservationRequest(null, court.getId(), date, LocalTime.of(11, 0), LocalTime.of(12, 0), 4, PaymentMethod.PIX, null);
-        var conflict = new ReservationRequest(null, court.getId(), date, LocalTime.of(11, 30), LocalTime.of(12, 30), 4, PaymentMethod.PIX, null);
+        var first = new ReservationRequest(null, court.getId(), date, LocalTime.of(11, 0), LocalTime.of(13, 0), 4, PaymentMethod.PIX, null);
+        var conflict = new ReservationRequest(null, court.getId(), date, LocalTime.of(12, 0), LocalTime.of(13, 0), 4, PaymentMethod.PIX, null);
 
         reservationService.create(first, client);
 
         assertThatThrownBy(() -> reservationService.create(conflict, client))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("Ja existe uma reserva");
+                .hasMessageContaining("Já existe uma reserva");
     }
 
     @Test
@@ -111,7 +111,7 @@ class PlaySpaceBusinessRulesTest {
                 new ReservationRequest(null, maintenanceCourt.getId(), LocalDate.now().plusDays(42), LocalTime.of(10, 0), LocalTime.of(11, 0), 2, PaymentMethod.PIX, null),
                 client
         )).isInstanceOf(BusinessException.class)
-                .hasMessageContaining("nao esta disponivel");
+                .hasMessageContaining("não está disponível");
     }
 
     @Test
@@ -140,7 +140,7 @@ class PlaySpaceBusinessRulesTest {
                 new ReservationRequest(null, court.getId(), LocalDate.now().plusDays(60), LocalTime.of(15, 0), LocalTime.of(16, 0), court.getPlayerCapacity() + 1, PaymentMethod.PIX, null),
                 client
         )).isInstanceOf(BusinessException.class)
-                .hasMessageContaining("capacidade maxima");
+                .hasMessageContaining("capacidade máxima");
 
         var reservation = reservationService.create(
                 new ReservationRequest(null, court.getId(), LocalDate.now().plusDays(61), LocalTime.of(15, 0), LocalTime.of(16, 0), 2, PaymentMethod.PIX, null),
@@ -149,7 +149,7 @@ class PlaySpaceBusinessRulesTest {
 
         assertThatThrownBy(() -> reservationService.updateStatus(reservation.getId(), ReservationStatus.CONCLUIDA, client))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("Transicao de status invalida");
+                .hasMessageContaining("Transição de status inválida");
     }
 
     @Test

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 public class AuditService {
     private static final int COLUMN_LIMIT = 255;
     private static final String SYSTEM_ACTOR = "SISTEMA";
-    private static final String UNKNOWN_ACTION = "Acao nao informada";
+    private static final String UNKNOWN_ACTION = "Ação não informada";
     private static final String GENERAL_CATEGORY = "GERAL";
 
     private final ActivityLogRepository activities;

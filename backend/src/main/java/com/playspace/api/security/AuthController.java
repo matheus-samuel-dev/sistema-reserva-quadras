@@ -1,6 +1,7 @@
 package com.playspace.api.security;
 
 import jakarta.validation.Valid;
+import com.playspace.api.user.PublicRegistrationRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,8 +24,13 @@ public class AuthController {
         return authService.login(request);
     }
 
+    @PostMapping("/register")
+    AuthResponse register(@Valid @RequestBody PublicRegistrationRequest request) {
+        return authService.register(request);
+    }
+
     @GetMapping("/me")
     AuthResponse me() {
-        return new AuthResponse(null, currentUser.user());
+        return new AuthResponse(null, com.playspace.api.user.UserResponse.from(currentUser.user()));
     }
 }

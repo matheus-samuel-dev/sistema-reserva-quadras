@@ -23,13 +23,25 @@ const relativeTime = (iso: string) => {
   return `${Math.floor(hours / 24)}d`;
 };
 
-export function NotificationBell({ user }: { user: User }) {
+export function NotificationBell({ user, onNavigate }: { user: User; onNavigate?: (path: string) => void }) {
   const { state, markNotificationRead, clearNotifications } = useAppData();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelId = `notifications-${useId().replace(/:/g, '')}`;
   const list = state.notifications[user.id] ?? [];
   const unread = list.filter((item) => !item.read).length;
+
+  const notificationTarget = (type: string) => {
+    const key = type.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const base = user.role === 'ADMIN' ? '/admin' : '/app';
+    if (key.includes('PAGAMENTO')) return `${base}/pagamentos`;
+    if (key.includes('CAMPEONATO')) return `${base}/campeonatos`;
+    if (key.includes('PARCEIRO')) return user.role === 'CLIENTE' ? '/app/parceiros' : '/admin/comunidade';
+    if (key.includes('COMUNIDADE') || key.includes('COMENTARIO')) return `${base}/comunidade`;
+    if (key.includes('RESERVA') || key.includes('LEMBRETE')) return `${base}/reservas`;
+    if (key.includes('GAMIFICACAO') || key.includes('CONQUISTA')) return user.role === 'CLIENTE' ? '/app/ranking' : '/admin';
+    return base;
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -86,7 +98,11 @@ export function NotificationBell({ user }: { user: User }) {
                 <button
                   key={item.id}
                   className={`w-full rounded-lg border p-3 text-left transition hover:border-neon/40 hover:bg-white/[0.04] ${item.read ? 'border-line bg-white/[0.02]' : 'border-neon/20 bg-neon/10'}`}
-                  onClick={() => markNotificationRead(item.id, user.id)}
+                  onClick={() => {
+                    markNotificationRead(item.id, user.id);
+                    setOpen(false);
+                    onNavigate?.(notificationTarget(item.type));
+                  }}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border ${item.read ? 'border-line bg-white/5 text-muted' : 'border-neon/25 bg-neon/10 text-neon'}`}>

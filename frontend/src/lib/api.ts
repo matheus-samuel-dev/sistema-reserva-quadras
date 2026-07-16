@@ -1,7 +1,9 @@
 import type {
   Activity,
   Achievement,
+  ChampionshipEnrollment,
   Championship,
+  CommunityComment,
   CommunityPost,
   Court,
   CourtStatus,
@@ -11,6 +13,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   PartnerAd,
+  PartnerInterest,
   RankingEntry,
   Reservation,
   ReservationFormInput,
@@ -18,6 +21,8 @@ import type {
   Role,
   Review,
   Settings,
+  SportsProfile,
+  UserPreferences,
   User
 } from './types';
 
@@ -89,6 +94,8 @@ const request = async <T>(
   }
 };
 
+export const apiRequest = request;
+
 const optionalRequest = async <T>(path: string, token: string): Promise<T | undefined> => {
   try {
     return await request<T>(path, {}, token);
@@ -132,6 +139,14 @@ const reservationStatusFromApi: Record<string, ReservationStatus> = {
   EM_ANDAMENTO: 'Em andamento',
   CONCLUIDA: 'Concluída',
   CANCELADA: 'Cancelada'
+};
+
+const reservationStatusToApi: Record<ReservationStatus, string> = {
+  Pendente: 'PENDENTE',
+  Confirmada: 'CONFIRMADA',
+  'Em andamento': 'EM_ANDAMENTO',
+  Concluída: 'CONCLUIDA',
+  Cancelada: 'CANCELADA'
 };
 
 const paymentMethodFromApi: Record<string, PaymentMethod> = {
@@ -203,6 +218,24 @@ type ApiPayment = Record<string, unknown> & {
   reservation: ApiReservation;
 };
 
+type ApiPaymentRefund = {
+  paymentId: number | string;
+  reservationId: number | string;
+  reservationCode: string;
+  reservationStatus: string;
+  method: string;
+  status: string;
+  amount: number;
+  transactionCode: string;
+  paidAt?: string | null;
+  refundedAt: string;
+};
+
+export type PaymentRefundResult = {
+  payment: Payment;
+  reservationStatus: ReservationStatus;
+};
+
 type ApiActivity = {
   id: number | string;
   actor: string;
@@ -222,9 +255,35 @@ export type ApiCommunityPost = {
   avatarUrl?: string | null;
   content: string;
   type: string;
+  modality?: string | null;
   likes: number;
   comments: number;
+  likedByCurrentUser?: boolean;
   createdAt: string;
+  updatedAt?: string;
+};
+
+export type ApiCommunityComment = {
+  id: number | string;
+  postId: number | string;
+  authorId: number | string;
+  authorName: string;
+  avatarUrl?: string | null;
+  content: string;
+  editable?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type ApiPage<T> = {
+  content: T[];
+  page?: number;
+  number?: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first?: boolean;
+  last?: boolean;
 };
 
 export type ApiPartnerAd = {
@@ -245,12 +304,74 @@ export type ApiChampionship = {
   name: string;
   modality: string;
   startDate: string;
-  categories: string;
+  categories?: string;
   prize: string;
   status: string;
   regulation: string;
-  bracket: string[];
+  bracket: string[] | string;
   createdAt: string;
+  description?: string;
+  courtId?: number | string;
+  courtName?: string;
+  location?: string;
+  city?: string;
+  endDate?: string;
+  registrationDeadline?: string;
+  maxParticipants?: number;
+  enrolledParticipants?: number;
+  availableSpots?: number;
+  format?: string;
+  registrationFee?: number;
+  imageUrl?: string | null;
+  currentUserEnrolled?: boolean;
+  updatedAt?: string;
+};
+
+export type ApiChampionshipEnrollment = {
+  id: number | string;
+  championshipId: number | string;
+  championshipName: string;
+  playerId: number | string;
+  playerName: string;
+  playerAvatarUrl?: string | null;
+  status: 'ATIVA' | 'CANCELADA';
+  enrolledAt: string;
+  cancelledAt?: string | null;
+};
+
+export type ApiSportsProfile = {
+  id: number | string;
+  userId: number | string;
+  name: string;
+  avatarUrl?: string | null;
+  city: string;
+  regions?: string[];
+  primaryModality: string;
+  modalities: Array<{ modality: string; level: SportsProfile['modalities'][number]['level']; primary: boolean }>;
+  availabilities: Array<{ dayOfWeek: SportsProfile['availabilities'][number]['dayOfWeek']; startTime: string; endTime: string }>;
+  objective: SportsProfile['objective'];
+  presentation: string;
+  position?: string | null;
+  discoverable: boolean;
+  currentInterestId?: number | string | null;
+  currentInterestStatus?: PartnerInterest['status'] | null;
+  currentInterestDirection?: 'ENVIADOS' | 'RECEBIDOS' | null;
+};
+
+export type ApiPartnerInterest = {
+  id: number | string;
+  senderId: number | string;
+  senderName: string;
+  senderAvatarUrl?: string | null;
+  receiverId: number | string;
+  receiverName: string;
+  receiverAvatarUrl?: string | null;
+  status: PartnerInterest['status'];
+  message?: string | null;
+  contactEmail?: string | null;
+  createdAt: string;
+  respondedAt?: string | null;
+  cancelledAt?: string | null;
 };
 
 export type ApiAchievement = {
@@ -267,6 +388,7 @@ export type ApiAchievement = {
 
 export type ApiReview = {
   id: number | string;
+  reservationId?: number | string | null;
   userName: string;
   avatarUrl?: string | null;
   courtName: string;
@@ -290,15 +412,42 @@ export type ApiRankingEntry = {
   reservations?: number;
   hours?: number;
   attendanceRate?: number;
+  points?: number;
+  achievements?: number;
 };
 
 type ApiSettings = {
   company?: string;
+  legalName?: string;
+  document?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  address?: string;
+  timezone?: string;
+  openingTime?: string;
+  closingTime?: string;
   hours?: string;
+  operatingDays?: Settings['operatingDays'];
   cancelationRuleHours?: number;
   minimumReservationMinutes?: number;
+  maximumAdvanceDays?: number;
+  slotMinutes?: number;
   modalities?: string[];
   defaultPrices?: Record<string, number>;
+  acceptPix?: boolean;
+  acceptCard?: boolean;
+  acceptCash?: boolean;
+  pixKey?: string;
+  emailNotifications?: boolean;
+  browserNotifications?: boolean;
+  reservationReminderHours?: number;
+  primaryColor?: string;
+  logoUrl?: string;
+  defaultTheme?: Settings['defaultTheme'];
+  minimumPasswordLength?: number;
+  sessionMinutes?: number;
+  requireStrongPassword?: boolean;
+  publicRegistrationEnabled?: boolean;
 };
 
 export const mapApiUser = (raw: ApiUser): User => {
@@ -317,6 +466,8 @@ export const mapApiUser = (raw: ApiUser): User => {
       photo: String(raw.avatarUrl ?? ''),
       bio: String(raw.bio ?? ''),
       city: String(raw.city ?? 'Não informada'),
+      phone: raw.phone ? String(raw.phone) : '',
+      availability: raw.availability ? String(raw.availability) : '',
       memberSince: String(raw.memberSince ?? new Date().toISOString().slice(0, 10)),
       favoriteModality,
       sports: sports.length ? sports : [favoriteModality],
@@ -442,7 +593,8 @@ export const mapApiPayment = (raw: ApiPayment): Payment => ({
   status: paymentStatusFromApi[String(raw.status ?? '')] ?? 'Pendente',
   amount: Number(raw.amount ?? 0),
   transactionCode: String(raw.transactionCode ?? ''),
-  paidAt: raw.paidAt ? String(raw.paidAt) : undefined
+  paidAt: raw.paidAt ? String(raw.paidAt) : undefined,
+  refundedAt: raw.refundedAt ? String(raw.refundedAt) : undefined
 });
 
 export const mapApiNotification = (raw: Record<string, unknown>): NotificationItem => ({
@@ -469,9 +621,24 @@ export const mapApiCommunityPost = (raw: ApiCommunityPost): CommunityPost => ({
   avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
   content: String(raw.content ?? ''),
   type: String(raw.type ?? 'Comunidade'),
+  modality: raw.modality ? pickModality(String(raw.modality)) : undefined,
   likes: Number(raw.likes ?? 0),
   comments: Number(raw.comments ?? 0),
-  createdAt: String(raw.createdAt ?? new Date().toISOString())
+  likedByCurrentUser: Boolean(raw.likedByCurrentUser),
+  createdAt: String(raw.createdAt ?? new Date().toISOString()),
+  updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined
+});
+
+export const mapApiCommunityComment = (raw: ApiCommunityComment): CommunityComment => ({
+  id: String(raw.id),
+  postId: String(raw.postId),
+  authorId: String(raw.authorId),
+  authorName: String(raw.authorName ?? 'Jogador PlaySpace'),
+  avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
+  content: String(raw.content ?? ''),
+  editable: Boolean(raw.editable),
+  createdAt: String(raw.createdAt ?? new Date().toISOString()),
+  updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined
 });
 
 export const mapApiPartnerAd = (raw: ApiPartnerAd): PartnerAd => ({
@@ -496,8 +663,72 @@ export const mapApiChampionship = (raw: ApiChampionship): Championship => ({
   regulation: String(raw.regulation ?? ''),
   prize: String(raw.prize ?? ''),
   status: String(raw.status ?? 'Em breve'),
-  bracket: Array.isArray(raw.bracket) ? raw.bracket.map(String) : [],
-  createdAt: String(raw.createdAt ?? new Date().toISOString())
+  bracket: Array.isArray(raw.bracket)
+    ? raw.bracket.map(String)
+    : String(raw.bracket ?? '').split(/\r?\n|→/).map((item) => item.trim()).filter(Boolean),
+  description: String(raw.description ?? ''),
+  courtId: raw.courtId == null ? undefined : String(raw.courtId),
+  courtName: raw.courtName ? String(raw.courtName) : undefined,
+  location: raw.location ? String(raw.location) : undefined,
+  city: raw.city ? String(raw.city) : undefined,
+  endDate: raw.endDate ? String(raw.endDate) : undefined,
+  registrationDeadline: raw.registrationDeadline ? String(raw.registrationDeadline) : undefined,
+  maxParticipants: raw.maxParticipants == null ? undefined : Number(raw.maxParticipants),
+  enrolledParticipants: raw.enrolledParticipants == null ? undefined : Number(raw.enrolledParticipants),
+  availableSpots: raw.availableSpots == null ? undefined : Number(raw.availableSpots),
+  format: raw.format ? String(raw.format) : undefined,
+  registrationFee: raw.registrationFee == null ? undefined : Number(raw.registrationFee),
+  imageUrl: raw.imageUrl ? String(raw.imageUrl) : undefined,
+  currentUserEnrolled: Boolean(raw.currentUserEnrolled),
+  createdAt: String(raw.createdAt ?? new Date().toISOString()),
+  updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined
+});
+
+export const mapApiChampionshipEnrollment = (raw: ApiChampionshipEnrollment): ChampionshipEnrollment => ({
+  id: String(raw.id),
+  championshipId: String(raw.championshipId),
+  championshipName: String(raw.championshipName),
+  playerId: String(raw.playerId),
+  playerName: String(raw.playerName),
+  playerAvatarUrl: raw.playerAvatarUrl ? String(raw.playerAvatarUrl) : undefined,
+  status: raw.status,
+  enrolledAt: String(raw.enrolledAt),
+  cancelledAt: raw.cancelledAt ? String(raw.cancelledAt) : undefined
+});
+
+export const mapApiSportsProfile = (raw: ApiSportsProfile): SportsProfile => ({
+  id: String(raw.id),
+  userId: String(raw.userId),
+  name: String(raw.name),
+  avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
+  city: String(raw.city ?? ''),
+  regions: Array.isArray(raw.regions) ? raw.regions.map(String) : [],
+  primaryModality: pickModality(raw.primaryModality),
+  modalities: (raw.modalities ?? []).map((item) => ({ modality: pickModality(item.modality), level: item.level, primary: Boolean(item.primary) })),
+  availabilities: (raw.availabilities ?? []).map((item) => ({ dayOfWeek: item.dayOfWeek, startTime: String(item.startTime).slice(0, 5), endTime: String(item.endTime).slice(0, 5) })),
+  objective: raw.objective,
+  presentation: String(raw.presentation ?? ''),
+  position: raw.position ? String(raw.position) : undefined,
+  discoverable: Boolean(raw.discoverable),
+  currentInterestId: raw.currentInterestId == null ? undefined : String(raw.currentInterestId),
+  currentInterestStatus: raw.currentInterestStatus ?? undefined,
+  currentInterestDirection: raw.currentInterestDirection ?? undefined
+});
+
+export const mapApiPartnerInterest = (raw: ApiPartnerInterest): PartnerInterest => ({
+  id: String(raw.id),
+  senderId: String(raw.senderId),
+  senderName: String(raw.senderName),
+  senderAvatarUrl: raw.senderAvatarUrl ? String(raw.senderAvatarUrl) : undefined,
+  receiverId: String(raw.receiverId),
+  receiverName: String(raw.receiverName),
+  receiverAvatarUrl: raw.receiverAvatarUrl ? String(raw.receiverAvatarUrl) : undefined,
+  status: raw.status,
+  message: raw.message ? String(raw.message) : undefined,
+  contactEmail: raw.contactEmail ? String(raw.contactEmail) : undefined,
+  createdAt: String(raw.createdAt),
+  respondedAt: raw.respondedAt ? String(raw.respondedAt) : undefined,
+  cancelledAt: raw.cancelledAt ? String(raw.cancelledAt) : undefined
 });
 
 export const mapApiAchievement = (raw: ApiAchievement): Achievement => ({
@@ -514,6 +745,7 @@ export const mapApiAchievement = (raw: ApiAchievement): Achievement => ({
 
 export const mapApiReview = (raw: ApiReview): Review => ({
   id: String(raw.id),
+  reservationId: raw.reservationId == null ? undefined : String(raw.reservationId),
   userName: String(raw.userName ?? 'Cliente PlaySpace'),
   avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
   courtName: String(raw.courtName ?? 'Quadra PlaySpace'),
@@ -534,8 +766,17 @@ export const mapApiRankingEntry = (raw: ApiRankingEntry): RankingEntry => ({
   favoriteModality: pickModality(raw.favoriteModality),
   reservations: Number(raw.reservations ?? 0),
   hours: Number(raw.hours ?? 0),
-  attendanceRate: Number(raw.attendanceRate ?? 0)
+  attendanceRate: Number(raw.attendanceRate ?? 0),
+  points: Number(raw.points ?? 0),
+  achievements: Number(raw.achievements ?? 0)
 });
+
+export const fetchRankingWithApi = async (period: 'WEEKLY' | 'MONTHLY' | 'ANNUAL', modality: Modality | 'Todas', token: string) => {
+  const parameters = new URLSearchParams({ period });
+  if (modality !== 'Todas') parameters.set('modality', modalityToApi[modality]);
+  const response = await request<ApiRankingEntry[]>(`/community/ranking?${parameters.toString()}`, {}, token);
+  return response.map(mapApiRankingEntry);
+};
 
 export const mapApiSettings = (raw: ApiSettings): Settings => {
   const modalities = Array.isArray(raw.modalities)
@@ -548,9 +789,20 @@ export const mapApiSettings = (raw: ApiSettings): Settings => {
 
   return {
     company: String(raw.company ?? 'PlaySpace Club'),
+    legalName: String(raw.legalName ?? ''),
+    document: String(raw.document ?? ''),
+    companyEmail: String(raw.companyEmail ?? ''),
+    companyPhone: String(raw.companyPhone ?? ''),
+    address: String(raw.address ?? ''),
+    timezone: String(raw.timezone ?? 'America/Sao_Paulo'),
+    openingTime: String(raw.openingTime ?? '08:00').slice(0, 5),
+    closingTime: String(raw.closingTime ?? '22:00').slice(0, 5),
     hours: String(raw.hours ?? '08:00 - 22:00'),
+    operatingDays: raw.operatingDays ?? ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'],
     cancelationRuleHours: Number(raw.cancelationRuleHours ?? 2),
     minimumReservationMinutes: Number(raw.minimumReservationMinutes ?? 60),
+    maximumAdvanceDays: Number(raw.maximumAdvanceDays ?? 90),
+    slotMinutes: Number(raw.slotMinutes ?? 60),
     modalities: modalities.length ? modalities : (Object.values(modalityFromApi) as Modality[]),
     defaultPrices: {
       'Beach Tennis': defaultPrices['Beach Tennis'] ?? 0,
@@ -559,7 +811,21 @@ export const mapApiSettings = (raw: ApiSettings): Settings => {
       'Tênis': defaultPrices['Tênis'] ?? 0,
       'Vôlei': defaultPrices['Vôlei'] ?? 0,
       Basquete: defaultPrices.Basquete ?? 0
-    }
+    },
+    acceptPix: raw.acceptPix !== false,
+    acceptCard: raw.acceptCard !== false,
+    acceptCash: Boolean(raw.acceptCash),
+    pixKey: String(raw.pixKey ?? ''),
+    emailNotifications: raw.emailNotifications !== false,
+    browserNotifications: raw.browserNotifications !== false,
+    reservationReminderHours: Number(raw.reservationReminderHours ?? 2),
+    primaryColor: String(raw.primaryColor ?? '#0F766E'),
+    logoUrl: String(raw.logoUrl ?? ''),
+    defaultTheme: raw.defaultTheme ?? 'SYSTEM',
+    minimumPasswordLength: Number(raw.minimumPasswordLength ?? 8),
+    sessionMinutes: Number(raw.sessionMinutes ?? 120),
+    requireStrongPassword: raw.requireStrongPassword !== false,
+    publicRegistrationEnabled: raw.publicRegistrationEnabled !== false
   };
 };
 
@@ -578,6 +844,16 @@ export const getCurrentUser = async (token: string) => {
 
 export const fetchCoreData = async (token: string, role: Role) => {
   const range = availabilityWindow();
+  const communityFeed = async () => {
+    const page = await optionalRequest<ApiPage<ApiCommunityPost>>('/community/posts?size=50', token);
+    if (Array.isArray(page?.content)) return page.content;
+    return optionalRequest<ApiCommunityPost[]>('/community/feed', token);
+  };
+  const championshipFeed = async () => {
+    const page = await optionalRequest<ApiPage<ApiChampionship>>('/championships?size=50', token);
+    if (Array.isArray(page?.content)) return page.content;
+    return optionalRequest<ApiChampionship[]>('/community/championships', token);
+  };
   const [
     courts,
     reservations,
@@ -586,8 +862,14 @@ export const fetchCoreData = async (token: string, role: Role) => {
     notifications,
     users,
     feed,
-    partners,
+    legacyPartners,
     championships,
+    sportsProfilePage,
+    mySportsProfile,
+    receivedInterests,
+    sentInterests,
+    enrollmentPage,
+    preferences,
     achievements,
     reviews,
     ranking,
@@ -602,9 +884,15 @@ export const fetchCoreData = async (token: string, role: Role) => {
     request<ApiPayment[]>(role === 'ADMIN' ? '/payments' : '/payments/my', {}, token),
     request<Record<string, unknown>[]>('/notifications', {}, token),
     role === 'ADMIN' ? request<ApiUser[]>('/users', {}, token) : Promise.resolve<ApiUser[]>([]),
-    optionalRequest<ApiCommunityPost[]>('/community/feed', token),
+    communityFeed(),
     optionalRequest<ApiPartnerAd[]>('/community/partners', token),
-    optionalRequest<ApiChampionship[]>('/community/championships', token),
+    championshipFeed(),
+    role === 'CLIENTE' ? optionalRequest<ApiPage<ApiSportsProfile>>('/partners?size=50', token) : Promise.resolve(undefined),
+    role === 'CLIENTE' ? optionalRequest<ApiSportsProfile>('/partners/profiles/me', token) : Promise.resolve(undefined),
+    role === 'CLIENTE' ? optionalRequest<ApiPage<ApiPartnerInterest>>('/partner-interests?direction=RECEBIDOS&size=100', token) : Promise.resolve(undefined),
+    role === 'CLIENTE' ? optionalRequest<ApiPage<ApiPartnerInterest>>('/partner-interests?direction=ENVIADOS&size=100', token) : Promise.resolve(undefined),
+    role === 'CLIENTE' ? optionalRequest<ApiPage<ApiChampionshipEnrollment>>('/championships/enrollments/my?size=100', token) : Promise.resolve(undefined),
+    optionalRequest<Record<string, unknown>>('/profile/preferences', token),
     optionalRequest<ApiAchievement[]>('/community/achievements/my', token),
     optionalRequest<ApiReview[]>('/community/reviews', token),
     optionalRequest<ApiRankingEntry[]>('/community/ranking', token),
@@ -624,8 +912,17 @@ export const fetchCoreData = async (token: string, role: Role) => {
     notifications: notifications.map(mapApiNotification),
     users: users.map(mapApiUser),
     posts: feed?.map(mapApiCommunityPost),
-    partnerAds: partners?.map(mapApiPartnerAd),
+    partnerAds: legacyPartners?.map(mapApiPartnerAd),
     championships: championships?.map(mapApiChampionship),
+    sportsProfiles: sportsProfilePage
+      ? [...(mySportsProfile ? [mapApiSportsProfile(mySportsProfile)] : []), ...sportsProfilePage.content.map(mapApiSportsProfile)]
+      : undefined,
+    partnerInterests: receivedInterests || sentInterests
+      ? [...new Map([...(receivedInterests?.content ?? []), ...(sentInterests?.content ?? [])]
+          .map((item) => [String(item.id), mapApiPartnerInterest(item)])).values()]
+      : undefined,
+    championshipEnrollments: enrollmentPage?.content.map(mapApiChampionshipEnrollment),
+    preferences: preferences ? mapApiPreferences(preferences) : undefined,
     achievements: achievements?.map(mapApiAchievement),
     reviews: reviews?.map(mapApiReview),
     ranking: ranking?.map(mapApiRankingEntry),
@@ -655,11 +952,32 @@ export const createReservationWithApi = async (input: ReservationFormInput, toke
 export const cancelReservationWithApi = async (reservationId: string, token: string) =>
   mapApiReservation(await request<ApiReservation>(`/reservations/${reservationId}/cancel`, { method: 'PUT' }, token));
 
+export const changeReservationStatusWithApi = async (reservationId: string, status: ReservationStatus, token: string) =>
+  mapApiReservation(await request<ApiReservation>(`/reservations/${reservationId}/status/${reservationStatusToApi[status]}`, { method: 'PUT' }, token));
+
 export const payReservationWithApi = async (reservationId: string, method: PaymentMethod, token: string) =>
   mapApiPayment(await request<ApiPayment>('/payments/demo', {
     method: 'POST',
     body: JSON.stringify({ reservationId: Number(reservationId), method: paymentMethodToApi[method], approve: true })
   }, token));
+
+export const refundPaymentWithApi = async (paymentId: string, token: string): Promise<PaymentRefundResult> => {
+  const raw = await request<ApiPaymentRefund>(`/payments/${paymentId}/refund`, { method: 'POST' }, token);
+  return {
+    payment: {
+      id: String(raw.paymentId),
+      reservationId: String(raw.reservationId),
+      reservationCode: raw.reservationCode,
+      method: paymentMethodFromApi[raw.method] ?? 'PIX',
+      status: paymentStatusFromApi[raw.status] ?? 'Cancelado',
+      amount: Number(raw.amount),
+      transactionCode: raw.transactionCode,
+      paidAt: raw.paidAt ?? undefined,
+      refundedAt: raw.refundedAt
+    },
+    reservationStatus: reservationStatusFromApi[raw.reservationStatus] ?? 'Cancelada'
+  };
+};
 
 const courtPayload = (court: Court) => ({
   name: court.name,
@@ -697,6 +1015,9 @@ const userPayload = (user: User) => ({
   favoriteModality: modalityToApi[user.profile.favoriteModality],
   sportsLevel: user.profile.level,
   avatarUrl: /^(https?:|data:)/.test(user.profile.photo) ? user.profile.photo : null,
+  phone: user.profile.phone || null,
+  availability: user.profile.availability || null,
+  practicedSports: user.profile.sports,
   ...(user.temporaryPassword ? { password: user.temporaryPassword } : {})
 });
 
@@ -730,6 +1051,261 @@ export const likePostWithApi = async (postId: string, token: string) => {
 export const enrollInChampionshipWithApi = async (championshipId: string, token: string) => {
   const response = await request<{ message?: string }>(`/community/championships/${championshipId}/enroll`, { method: 'POST' }, token);
   return String(response.message ?? 'Inscrição confirmada.');
+};
+
+export const fetchCommunityPostsWithApi = async (token: string, page = 0, size = 20) => {
+  const response = await request<ApiPage<ApiCommunityPost>>(`/community/posts?page=${page}&size=${size}`, {}, token);
+  return { ...response, content: response.content.map(mapApiCommunityPost) };
+};
+
+export const createCommunityPostWithApi = async (
+  input: Pick<CommunityPost, 'content' | 'type' | 'modality'>,
+  token: string
+) => mapApiCommunityPost(await request<ApiCommunityPost>('/community/posts', {
+  method: 'POST',
+  body: JSON.stringify({ content: input.content, type: input.type, modality: input.modality ? modalityToApi[input.modality] : null })
+}, token));
+
+export const updateCommunityPostWithApi = async (
+  postId: string,
+  input: Pick<CommunityPost, 'content' | 'type' | 'modality'>,
+  token: string
+) => mapApiCommunityPost(await request<ApiCommunityPost>(`/community/posts/${postId}`, {
+  method: 'PUT',
+  body: JSON.stringify({ content: input.content, type: input.type, modality: input.modality ? modalityToApi[input.modality] : null })
+}, token));
+
+export const deleteCommunityPostWithApi = (postId: string, token: string) =>
+  request<void>(`/community/posts/${postId}`, { method: 'DELETE' }, token);
+
+export const toggleCommunityLikeWithApi = async (postId: string, liked: boolean, token: string) =>
+  mapApiCommunityPost(await request<ApiCommunityPost>(`/community/posts/${postId}/likes`, { method: liked ? 'DELETE' : 'POST' }, token));
+
+export const fetchCommunityCommentsWithApi = async (postId: string, token: string, page = 0, size = 50) => {
+  const response = await request<ApiPage<ApiCommunityComment>>(`/community/posts/${postId}/comments?page=${page}&size=${size}`, {}, token);
+  return { ...response, content: response.content.map(mapApiCommunityComment) };
+};
+
+export const createCommunityCommentWithApi = async (postId: string, content: string, token: string) =>
+  mapApiCommunityComment(await request<ApiCommunityComment>(`/community/posts/${postId}/comments`, {
+    method: 'POST', body: JSON.stringify({ content })
+  }, token));
+
+export const updateCommunityCommentWithApi = async (commentId: string, content: string, token: string) =>
+  mapApiCommunityComment(await request<ApiCommunityComment>(`/community/comments/${commentId}`, {
+    method: 'PUT', body: JSON.stringify({ content })
+  }, token));
+
+export const deleteCommunityCommentWithApi = (commentId: string, token: string) =>
+  request<void>(`/community/comments/${commentId}`, { method: 'DELETE' }, token);
+
+export const createReviewWithApi = async (
+  input: {
+    reservationId: string;
+    cleaning: number;
+    lighting: number;
+    organization: number;
+    service: number;
+    courtQuality: number;
+    comment: string;
+  },
+  token: string
+) => mapApiReview(await request<ApiReview>('/community/reviews', {
+  method: 'POST',
+  body: JSON.stringify({ ...input, reservationId: Number(input.reservationId) })
+}, token));
+
+export const fetchChampionshipsWithApi = async (token: string, page = 0, size = 50) => {
+  const response = await request<ApiPage<ApiChampionship>>(`/championships?page=${page}&size=${size}`, {}, token);
+  return { ...response, content: response.content.map(mapApiChampionship) };
+};
+
+const championshipPayload = (item: Championship) => ({
+  name: item.name,
+  description: item.description,
+  modality: modalityToApi[item.modality],
+  courtId: Number(item.courtId),
+  location: item.location,
+  city: item.city,
+  startDate: item.startDate,
+  endDate: item.endDate,
+  registrationDeadline: item.registrationDeadline,
+  maxParticipants: item.maxParticipants,
+  format: item.format,
+  prize: item.prize,
+  registrationFee: item.registrationFee ?? 0,
+  regulation: item.regulation,
+  imageUrl: item.imageUrl || null,
+  bracket: item.bracket.join('\n'),
+  initialStatus: item.status
+});
+
+export const saveChampionshipWithApi = async (item: Championship, token: string) => {
+  const editing = /^\d+$/.test(item.id);
+  return mapApiChampionship(await request<ApiChampionship>(editing ? `/championships/${item.id}` : '/championships', {
+    method: editing ? 'PUT' : 'POST', body: JSON.stringify(championshipPayload(item))
+  }, token));
+};
+
+export const changeChampionshipStatusWithApi = async (id: string, status: string, token: string) =>
+  mapApiChampionship(await request<ApiChampionship>(`/championships/${id}/status`, {
+    method: 'PATCH', body: JSON.stringify({ status })
+  }, token));
+
+export const deleteChampionshipWithApi = (id: string, token: string) =>
+  request<void>(`/championships/${id}`, { method: 'DELETE' }, token);
+
+export const enrollChampionshipWithApi = async (id: string, token: string) =>
+  mapApiChampionshipEnrollment(await request<ApiChampionshipEnrollment>(`/championships/${id}/enrollments`, { method: 'POST' }, token));
+
+export const cancelChampionshipEnrollmentWithApi = (id: string, token: string) =>
+  request<void>(`/championships/${id}/enrollments/my`, { method: 'DELETE' }, token);
+
+export const fetchChampionshipParticipantsWithApi = async (id: string, token: string) => {
+  const response = await request<ApiPage<ApiChampionshipEnrollment>>(`/championships/${id}/participants?size=100`, {}, token);
+  return response.content.map(mapApiChampionshipEnrollment);
+};
+
+export const fetchSportsProfilesWithApi = async (token: string) => {
+  const response = await request<ApiPage<ApiSportsProfile>>('/partners?size=50', {}, token);
+  return response.content.map(mapApiSportsProfile);
+};
+
+export const fetchMySportsProfileWithApi = async (token: string) =>
+  mapApiSportsProfile(await request<ApiSportsProfile>('/partners/profiles/me', {}, token));
+
+export const saveSportsProfileWithApi = async (profile: SportsProfile, token: string) =>
+  mapApiSportsProfile(await request<ApiSportsProfile>('/partners/profiles/me', {
+    method: 'PUT',
+    body: JSON.stringify({
+      city: profile.city,
+      regions: profile.regions,
+      primaryModality: modalityToApi[profile.primaryModality],
+      modalities: profile.modalities.map((item) => ({ modality: modalityToApi[item.modality], level: item.level })),
+      availabilities: profile.availabilities,
+      objective: profile.objective,
+      presentation: profile.presentation,
+      position: profile.position || null,
+      discoverable: profile.discoverable,
+      avatarUrl: profile.avatarUrl || null
+    })
+  }, token));
+
+export const fetchPartnerInterestsWithApi = async (token: string) => {
+  const [received, sent] = await Promise.all([
+    request<ApiPage<ApiPartnerInterest>>('/partner-interests?direction=RECEBIDOS&size=100', {}, token),
+    request<ApiPage<ApiPartnerInterest>>('/partner-interests?direction=ENVIADOS&size=100', {}, token)
+  ]);
+  const unique = new Map([...received.content, ...sent.content].map((item) => [String(item.id), mapApiPartnerInterest(item)]));
+  return [...unique.values()];
+};
+
+export const sendPartnerInterestWithApi = async (userId: string, message: string, token: string) =>
+  mapApiPartnerInterest(await request<ApiPartnerInterest>(`/partners/${userId}/interests`, {
+    method: 'POST', body: JSON.stringify({ message })
+  }, token));
+
+export const respondPartnerInterestWithApi = async (id: string, accept: boolean, token: string) =>
+  mapApiPartnerInterest(await request<ApiPartnerInterest>(`/partner-interests/${id}/${accept ? 'accept' : 'refuse'}`, { method: 'PATCH' }, token));
+
+export const cancelPartnerInterestWithApi = (id: string, token: string) =>
+  request<void>(`/partner-interests/${id}`, { method: 'DELETE' }, token);
+
+export const saveProfileWithApi = async (user: User, token: string) => mapApiUser(await request<ApiUser>('/profile', {
+  method: 'PUT',
+  body: JSON.stringify({
+    name: user.name,
+    phone: user.profile.phone || null,
+    city: user.profile.city || null,
+    avatarUrl: /^(https?:|data:)/.test(user.profile.photo) ? user.profile.photo : null,
+    bio: user.profile.bio || null,
+    sportsLevel: user.profile.level,
+    favoriteModality: modalityToApi[user.profile.favoriteModality],
+    practicedSports: user.profile.sports,
+    availability: user.profile.availability || null
+  })
+}, token));
+
+export const removeProfileAvatarWithApi = async (token: string) =>
+  mapApiUser(await request<ApiUser>('/profile/avatar', { method: 'DELETE' }, token));
+
+export const changePasswordWithApi = (currentPassword: string, newPassword: string, confirmation: string, token: string) =>
+  request<void>('/profile/password', {
+    method: 'PUT', body: JSON.stringify({ currentPassword, newPassword, newPasswordConfirmation: confirmation })
+  }, token);
+
+export const mapApiPreferences = (raw: Record<string, unknown>): UserPreferences => ({
+  theme: String(raw.theme ?? 'SYSTEM') as UserPreferences['theme'],
+  notificationsEnabled: raw.notificationsEnabled !== false,
+  reservationReminderHours: Number(raw.reservationReminderHours ?? 2),
+  emailNotifications: raw.emailNotifications !== false,
+  browserNotifications: raw.browserNotifications !== false,
+  defaultCity: String(raw.defaultCity ?? ''),
+  favoriteModalities: Array.isArray(raw.favoriteModalities) ? raw.favoriteModalities.map((item) => pickModality(String(item))) : [],
+  preferredTimes: String(raw.preferredTimes ?? ''),
+  privateProfile: Boolean(raw.privateProfile),
+  discoverableByPartners: raw.discoverableByPartners !== false,
+  language: String(raw.language ?? 'pt-BR') as UserPreferences['language']
+});
+
+export const fetchPreferencesWithApi = async (token: string) =>
+  mapApiPreferences(await request<Record<string, unknown>>('/profile/preferences', {}, token));
+
+export const savePreferencesWithApi = async (preferences: UserPreferences, token: string) =>
+  mapApiPreferences(await request<Record<string, unknown>>('/profile/preferences', {
+    method: 'PUT',
+    body: JSON.stringify({ ...preferences, favoriteModalities: preferences.favoriteModalities.map((item) => modalityToApi[item]) })
+  }, token));
+
+const settingsPayload = (value: Settings) => ({
+  company: value.company,
+  legalName: value.legalName || null,
+  document: value.document || null,
+  companyEmail: value.companyEmail || null,
+  companyPhone: value.companyPhone || null,
+  address: value.address || null,
+  timezone: value.timezone ?? 'America/Sao_Paulo',
+  openingTime: value.openingTime ?? value.hours.split(' - ')[0],
+  closingTime: value.closingTime ?? value.hours.split(' - ')[1],
+  operatingDays: value.operatingDays,
+  cancelationRuleHours: value.cancelationRuleHours,
+  minimumReservationMinutes: value.minimumReservationMinutes,
+  maximumAdvanceDays: value.maximumAdvanceDays,
+  slotMinutes: value.slotMinutes,
+  modalities: value.modalities.map((item) => modalityToApi[item]),
+  defaultPrices: Object.fromEntries(Object.entries(value.defaultPrices).map(([key, price]) => [modalityToApi[key as Modality], price])),
+  acceptPix: value.acceptPix,
+  acceptCard: value.acceptCard,
+  acceptCash: value.acceptCash,
+  pixKey: value.pixKey || null,
+  emailNotifications: value.emailNotifications,
+  browserNotifications: value.browserNotifications,
+  reservationReminderHours: value.reservationReminderHours,
+  primaryColor: value.primaryColor,
+  logoUrl: value.logoUrl || null,
+  defaultTheme: value.defaultTheme,
+  minimumPasswordLength: value.minimumPasswordLength,
+  sessionMinutes: value.sessionMinutes,
+  requireStrongPassword: value.requireStrongPassword,
+  publicRegistrationEnabled: value.publicRegistrationEnabled
+});
+
+export const saveSettingsWithApi = async (value: Settings, token: string) =>
+  mapApiSettings(await request<ApiSettings>('/settings', { method: 'PUT', body: JSON.stringify(settingsPayload(value)) }, token));
+
+export const registerWithApi = async (input: { name: string; email: string; password: string; confirmation: string; phone?: string }) => {
+  const response = await request<{ token: string; user: ApiUser }>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: input.name,
+      email: input.email,
+      password: input.password,
+      passwordConfirmation: input.confirmation,
+      phone: input.phone || null,
+      acceptedTerms: true
+    })
+  });
+  return { token: response.token, user: mapApiUser(response.user) };
 };
 
 export const askAiWithApi = async (question: string, token: string) => {

@@ -1,5 +1,5 @@
 import { ImageOff, Volleyball } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import courtsSheet from '../assets/courts/playspace-courts-sheet.webp';
 
 const courtPanels: Record<string, { column: number; row: number }> = {
@@ -20,27 +20,64 @@ const modalityPanels: Record<string, { column: number; row: number }> = {
   Basquete: { column: 2, row: 1 }
 };
 
+const safeDataImagePattern = /^data:image\/(?:avif|gif|jpe?g|png|webp);base64,[a-z0-9+/=\s]+$/i;
+
+export function getSafeCourtImageSource(image?: string) {
+  const normalized = image?.trim();
+  if (!normalized) return undefined;
+  if (safeDataImagePattern.test(normalized)) return normalized;
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function CourtImage({
   courtId,
   courtName,
   modality,
+  image,
   alt,
   className = ''
 }: {
   courtId: string;
   courtName: string;
   modality?: string;
+  image?: string;
   alt?: string;
   className?: string;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const customSource = getSafeCourtImageSource(image);
+  const [customImageFailed, setCustomImageFailed] = useState(false);
+  const [artImageFailed, setArtImageFailed] = useState(false);
   const panel = courtPanels[courtId] ?? (modality ? modalityPanels[modality] : undefined);
   const accessibleAlt = alt ?? `Vista da ${courtName}${modality ? `, preparada para ${modality}` : ''}`;
-  const showFallback = imageFailed || !panel;
+  const showCustomImage = Boolean(customSource && !customImageFailed);
+  const showFallback = !showCustomImage && (artImageFailed || !panel);
+
+  useEffect(() => {
+    setCustomImageFailed(false);
+  }, [customSource]);
+
+  useEffect(() => {
+    setArtImageFailed(false);
+  }, [courtId, modality]);
 
   return (
     <div className={`relative aspect-[4/3] overflow-hidden bg-[linear-gradient(135deg,var(--panel-soft),var(--surface-2))] ${className}`}>
-      {showFallback ? (
+      {showCustomImage ? (
+        <img
+          src={customSource}
+          alt={accessibleAlt}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setCustomImageFailed(true)}
+        />
+      ) : showFallback ? (
         <div
           className="absolute inset-0 grid place-items-center p-5 text-center text-muted"
           role="img"
@@ -67,7 +104,7 @@ export function CourtImage({
               left: `-${panel.column * 100}%`,
               top: `-${panel.row * 100}%`
             }}
-            onError={() => setImageFailed(true)}
+            onError={() => setArtImageFailed(true)}
           />
         </div>
       )}

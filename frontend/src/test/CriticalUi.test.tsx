@@ -77,12 +77,14 @@ describe('componentes críticos de interface', () => {
     const loadAvailability = vi.fn(() => new Promise<void>((resolve) => pendingResolvers.push(resolve)));
 
     render(
-      <WeeklyCalendar
-        reservations={[]}
-        onReservationClick={vi.fn()}
-        onNewReservation={vi.fn()}
-        onVisibleRangeChange={loadAvailability}
-      />
+      <AppDataProvider>
+        <WeeklyCalendar
+          reservations={[]}
+          onReservationClick={vi.fn()}
+          onNewReservation={vi.fn()}
+          onVisibleRangeChange={loadAvailability}
+        />
+      </AppDataProvider>
     );
 
     await waitFor(() => expect(loadAvailability).toHaveBeenCalledTimes(1));

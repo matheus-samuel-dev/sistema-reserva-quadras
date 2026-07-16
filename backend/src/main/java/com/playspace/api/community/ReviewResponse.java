@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 
 public record ReviewResponse(
         Long id,
+        Long reservationId,
         String userName,
         String avatarUrl,
         String courtName,
@@ -15,6 +16,7 @@ public record ReviewResponse(
     static ReviewResponse from(Review review) {
         return new ReviewResponse(
                 review.getId(),
+                review.getReservation().getId(),
                 review.getUser().getName(),
                 review.getUser().getAvatarUrl(),
                 review.getCourt().getName(),

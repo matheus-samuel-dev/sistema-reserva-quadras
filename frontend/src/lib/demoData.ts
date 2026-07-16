@@ -5,12 +5,14 @@ import type {
   CommunityPost,
   Court,
   NotificationItem,
+  PartnerInterest,
   PartnerAd,
   Payment,
   PlaySpaceState,
   Reservation,
   Review,
   Settings,
+  SportsProfile,
   User
 } from './types';
 
@@ -322,11 +324,11 @@ export const notifications: Record<string, NotificationItem[]> = {
 };
 
 export const activities: Activity[] = [
-  { id: 'a-1', actor: 'Marina Costa', action: 'pagamento aprovado via PIX', category: 'Pagamento', createdAt: at(10) },
-  { id: 'a-2', actor: 'Lucas Alves', action: 'criou reserva na Arena Summit', category: 'Reserva', createdAt: at(22) },
-  { id: 'a-3', actor: 'Equipe PlaySpace', action: 'marcou Hangar Vôlei em manutenção', category: 'Quadra', createdAt: at(58) },
-  { id: 'a-4', actor: 'Carlos Nunes', action: 'publicou anúncio para parceiro', category: 'Comunidade', createdAt: at(94) },
-  { id: 'a-5', actor: 'Beatriz Lima', action: 'registrou avaliação 5 estrelas', category: 'Avaliação', createdAt: at(130) }
+  { id: 'a-1', actor: 'Marina Costa', action: 'Pagamento aprovado via PIX', category: 'Pagamento', createdAt: at(10) },
+  { id: 'a-2', actor: 'Lucas Alves', action: 'Nova reserva criada na Arena Summit', category: 'Reserva', createdAt: at(22) },
+  { id: 'a-3', actor: 'Equipe PlaySpace', action: 'Hangar Vôlei marcada como em manutenção', category: 'Quadra', createdAt: at(58) },
+  { id: 'a-4', actor: 'Carlos Nunes', action: 'Anúncio de parceiro publicado', category: 'Comunidade', createdAt: at(94) },
+  { id: 'a-5', actor: 'Beatriz Lima', action: 'Avaliação de 5 estrelas registrada', category: 'Avaliação', createdAt: at(130) }
 ];
 
 export const achievements: Record<string, Achievement[]> = {
@@ -341,11 +343,11 @@ export const achievements: Record<string, Achievement[]> = {
 };
 
 export const posts: CommunityPost[] = [
-  { id: 'post-1', authorId: 'u-carlos', authorName: 'Carlos Nunes', content: 'realizou uma nova reserva para Futevôlei hoje às 17:00.', type: 'Reserva', likes: 18, comments: 3, createdAt: at(9) },
-  { id: 'post-2', authorId: 'u-cliente', authorName: 'Marina Costa', content: 'desbloqueou a conquista 25 reservas.', type: 'Conquista', likes: 31, comments: 6, createdAt: at(46) },
-  { id: 'post-3', authorId: 'u-lucas', authorName: 'Lucas Alves', content: 'está procurando time para society às quintas.', type: 'Parceiros', likes: 12, comments: 5, createdAt: at(80) },
-  { id: 'post-4', authorId: 'u-admin', authorName: 'PlaySpace Club', content: 'abriu inscrições para o Open PlaySpace Beach.', type: 'Campeonato', likes: 42, comments: 8, createdAt: at(120) },
-  { id: 'post-5', authorId: 'u-admin', authorName: 'PlaySpace Club', content: 'liberou novos horários premium para o fim de semana.', type: 'Agenda', likes: 27, comments: 4, createdAt: at(180) }
+  { id: 'post-1', authorId: 'u-carlos', authorName: 'Carlos Nunes', content: 'Nova reserva criada para Futevôlei hoje às 17:00.', type: 'Reserva', modality: 'Futevôlei', likes: 18, comments: 1, likedByUserIds: ['u-lucas'], commentItems: [{ id: 'comment-1', postId: 'post-1', authorId: 'u-lucas', authorName: 'Lucas Alves', content: 'Bom jogo! A Quadra Pulse está excelente.', createdAt: at(6) }], createdAt: at(9) },
+  { id: 'post-2', authorId: 'u-cliente', authorName: 'Marina Costa', content: 'Conquista “25 reservas” desbloqueada.', type: 'Conquista', modality: 'Beach Tennis', likes: 31, comments: 1, likedByUserIds: ['u-carlos'], commentItems: [{ id: 'comment-2', postId: 'post-2', authorId: 'u-carlos', authorName: 'Carlos Nunes', content: 'Parabéns pela constância, Marina!', createdAt: at(40) }], createdAt: at(46) },
+  { id: 'post-3', authorId: 'u-lucas', authorName: 'Lucas Alves', content: 'Procuro um time para Society às quintas-feiras.', type: 'Parceiros', modality: 'Society', likes: 12, comments: 1, likedByUserIds: [], commentItems: [{ id: 'comment-3', postId: 'post-3', authorId: 'u-cliente', authorName: 'Marina Costa', content: 'Vou compartilhar com o pessoal da liga.', createdAt: at(72) }], createdAt: at(80) },
+  { id: 'post-4', authorId: 'u-admin', authorName: 'PlaySpace Club', content: 'Inscrições abertas para o Open PlaySpace Beach.', type: 'Campeonato', modality: 'Beach Tennis', likes: 42, comments: 1, likedByUserIds: ['u-cliente'], commentItems: [{ id: 'comment-4', postId: 'post-4', authorId: 'u-cliente', authorName: 'Marina Costa', content: 'Regulamento muito bem organizado!', createdAt: at(110) }], createdAt: at(120) },
+  { id: 'post-5', authorId: 'u-admin', authorName: 'PlaySpace Club', content: 'Novos horários premium liberados para o fim de semana.', type: 'Agenda', likes: 27, comments: 0, likedByUserIds: [], commentItems: [], createdAt: at(180) }
 ];
 
 export const partnerAds: PartnerAd[] = [
@@ -354,16 +356,42 @@ export const partnerAds: PartnerAd[] = [
   { id: 'pa-3', playerId: 'u-carlos', playerName: 'Carlos Nunes', modality: 'Futevôlei', level: 'Intermediário', city: 'Santos', availability: 'Seg, Qua e Sex às 17:00', notes: 'Busco parceiro para campeonato.' }
 ];
 
+export const sportsProfiles: SportsProfile[] = [
+  { id: 'sp-marina', userId: 'u-cliente', name: 'Marina Costa', city: 'São Paulo', regions: ['Pinheiros', 'Vila Madalena'], primaryModality: 'Beach Tennis', modalities: [{ modality: 'Beach Tennis', level: 'INTERMEDIARIO', primary: true }, { modality: 'Futevôlei', level: 'INTERMEDIARIO', primary: false }], availabilities: [{ dayOfWeek: 'TUESDAY', startTime: '18:00', endTime: '21:00' }, { dayOfWeek: 'THURSDAY', startTime: '18:00', endTime: '21:00' }, { dayOfWeek: 'SATURDAY', startTime: '09:00', endTime: '12:00' }], objective: 'JOGO_CASUAL', presentation: 'Busco jogos equilibrados, treinos leves e novas duplas para os fins de semana.', discoverable: true },
+  { id: 'sp-lucas', userId: 'u-lucas', name: 'Lucas Alves', city: 'Campinas', regions: ['Cambuí'], primaryModality: 'Society', modalities: [{ modality: 'Society', level: 'AVANCADO', primary: true }, { modality: 'Basquete', level: 'INTERMEDIARIO', primary: false }], availabilities: [{ dayOfWeek: 'THURSDAY', startTime: '19:00', endTime: '22:00' }, { dayOfWeek: 'SATURDAY', startTime: '09:00', endTime: '12:00' }], objective: 'ENCONTRAR_TIME', presentation: 'Atacante disponível para completar equipes e disputar ligas locais.', position: 'Atacante', discoverable: true },
+  { id: 'sp-carlos', userId: 'u-carlos', name: 'Carlos Nunes', city: 'Santos', regions: ['Gonzaga'], primaryModality: 'Futevôlei', modalities: [{ modality: 'Futevôlei', level: 'INTERMEDIARIO', primary: true }, { modality: 'Beach Tennis', level: 'INTERMEDIARIO', primary: false }], availabilities: [{ dayOfWeek: 'WEDNESDAY', startTime: '18:00', endTime: '21:00' }, { dayOfWeek: 'SATURDAY', startTime: '09:00', endTime: '12:00' }], objective: 'TREINO', presentation: 'Procuro parceiros consistentes para evoluir fundamentos.', discoverable: true },
+  { id: 'sp-bia', userId: 'u-bia', name: 'Beatriz Lima', city: 'São Paulo', regions: ['Moema'], primaryModality: 'Tênis', modalities: [{ modality: 'Tênis', level: 'INICIANTE', primary: true }], availabilities: [{ dayOfWeek: 'SATURDAY', startTime: '08:00', endTime: '12:00' }], objective: 'JOGO_CASUAL', presentation: 'Comecei no Tênis recentemente e busco partidas amistosas.', discoverable: true },
+  { id: 'sp-joao', userId: 'u-joao', name: 'João Pereira', city: 'Osasco', regions: ['Centro'], primaryModality: 'Basquete', modalities: [{ modality: 'Basquete', level: 'AVANCADO', primary: true }], availabilities: [{ dayOfWeek: 'TUESDAY', startTime: '20:00', endTime: '23:00' }], objective: 'COMPETICAO', presentation: 'Armador focado em treinos intensos e campeonatos amadores.', position: 'Armador', discoverable: true }
+];
+
+export const partnerInterests: PartnerInterest[] = [
+  { id: 'interest-1', senderId: 'u-lucas', senderName: 'Lucas Alves', receiverId: 'u-cliente', receiverName: 'Marina Costa', status: 'PENDENTE', message: 'Tenho disponibilidade às quintas. Vamos combinar uma partida?', createdAt: at(35) },
+  { id: 'interest-2', senderId: 'u-cliente', senderName: 'Marina Costa', receiverId: 'u-carlos', receiverName: 'Carlos Nunes', status: 'ACEITO', message: 'Podemos treinar aos sábados de manhã?', contactEmail: 'carlos@playspace.com', createdAt: at(1440), respondedAt: at(1200) }
+];
+
 export const championships: Championship[] = [
   {
     id: 'ch-1',
     name: 'Open PlaySpace Beach',
     modality: 'Beach Tennis',
     startDate: isoDate(18),
+    endDate: isoDate(20),
+    registrationDeadline: isoDate(12),
+    description: 'Competição oficial da comunidade com fase de grupos e eliminatórias.',
+    courtId: 'c-aurora',
+    courtName: 'Quadra Aurora',
+    location: 'Arena PlaySpace - Setor A',
+    city: 'São Paulo',
+    maxParticipants: 32,
+    enrolledParticipants: 18,
+    availableSpots: 14,
+    format: 'Duplas com fase de grupos e eliminatórias',
+    registrationFee: 95,
     categories: 'Duplas B, C e Iniciante',
     regulation: 'Fase de grupos e mata-mata, partidas em um set até 6 games.',
     prize: 'Troféu, créditos PlaySpace e brindes premium',
-    status: 'Inscrições abertas',
+    status: 'INSCRICOES_ABERTAS',
+    currentUserEnrolled: false,
     bracket: ['Grupo A', 'Semifinais', 'Final']
   },
   {
@@ -371,16 +399,39 @@ export const championships: Championship[] = [
     name: 'Liga Society Night',
     modality: 'Society',
     startDate: isoDate(32),
+    endDate: isoDate(60),
+    registrationDeadline: isoDate(20),
+    description: 'Liga noturna com tabela corrida e final entre os melhores colocados.',
+    courtId: 'c-summit',
+    courtName: 'Arena Summit',
+    location: 'Arena Summit',
+    city: 'São Paulo',
+    maxParticipants: 16,
+    enrolledParticipants: 16,
+    availableSpots: 0,
+    format: 'Pontos corridos e final',
+    registrationFee: 280,
     categories: 'Misto e masculino',
     regulation: 'Tabela corrida com pontuação por vitória, empate e fair play.',
     prize: 'Plano mensal PlaySpace Prime',
-    status: 'Em breve',
+    status: 'INSCRICOES_ENCERRADAS',
     bracket: ['Rodada 1', 'Rodada 2', 'Final']
+  },
+  {
+    id: 'ch-3', name: 'Circuito Litoral de Futevôlei', modality: 'Futevôlei', startDate: isoDate(-2), endDate: isoDate(1), registrationDeadline: isoDate(-7), description: 'Etapa regional em andamento.', courtId: 'c-pulse', courtName: 'Quadra Pulse', location: 'Quadra Pulse', city: 'Santos', maxParticipants: 24, enrolledParticipants: 24, availableSpots: 0, format: 'Grupos e mata-mata', categories: 'Duplas intermediárias e avançadas', regulation: 'Partidas em set único com arbitragem oficial.', prize: 'Troféus e kits esportivos', registrationFee: 80, status: 'EM_ANDAMENTO', bracket: ['Quartas de final', 'Semifinais', 'Final']
+  },
+  {
+    id: 'ch-4', name: 'Masters PlaySpace de Tênis', modality: 'Tênis', startDate: isoDate(-30), endDate: isoDate(-28), registrationDeadline: isoDate(-40), description: 'Edição concluída do torneio Masters.', courtId: 'c-tennis', courtName: 'Studio Tênis', location: 'Studio Tênis', city: 'São Paulo', maxParticipants: 16, enrolledParticipants: 16, availableSpots: 0, format: 'Eliminatória simples', categories: 'Individual A, B e iniciante', regulation: 'Melhor de três sets curtos.', prize: 'Troféu Masters', registrationFee: 120, status: 'CONCLUIDO', bracket: ['Quartas de final', 'Semifinais', 'Final: Beatriz 2 × 1 Marina']
   }
 ];
 
+export const championshipEnrollments: PlaySpaceState['championshipEnrollments'] = [
+  { id: 'enroll-1', championshipId: 'ch-3', championshipName: 'Circuito Litoral de Futevôlei', playerId: 'u-carlos', playerName: 'Carlos Nunes', status: 'ATIVA', enrolledAt: at(10080) },
+  { id: 'enroll-2', championshipId: 'ch-4', championshipName: 'Masters PlaySpace de Tênis', playerId: 'u-bia', playerName: 'Beatriz Lima', status: 'ATIVA', enrolledAt: at(60000) }
+];
+
 export const reviews: Review[] = [
-  { id: 'rv-1', userName: 'Marina Costa', courtName: 'Quadra Aurora', cleaning: 5, lighting: 5, organization: 5, service: 5, courtQuality: 5, average: 5, comment: 'Check-in rápido, areia impecável e iluminação perfeita.' },
+  { id: 'rv-1', reservationId: 'r-10', userName: 'Marina Costa', courtName: 'Quadra Aurora', cleaning: 5, lighting: 5, organization: 5, service: 5, courtQuality: 5, average: 5, comment: 'Check-in rápido, areia impecável e iluminação perfeita.' },
   { id: 'rv-2', userName: 'Lucas Alves', courtName: 'Arena Summit', cleaning: 4, lighting: 5, organization: 4, service: 5, courtQuality: 5, average: 4.6, comment: 'Ótima estrutura para society noturno.' },
   { id: 'rv-3', userName: 'Beatriz Lima', courtName: 'Studio Tênis', cleaning: 5, lighting: 4, organization: 5, service: 5, courtQuality: 4, average: 4.6, comment: 'Boa quadra coberta e equipe atenciosa.' }
 ];
@@ -394,15 +445,27 @@ export const ranking = users
     favoriteModality: user.profile.favoriteModality,
     reservations: user.profile.reservationsDone,
     hours: user.profile.hoursOnCourt,
-    attendanceRate: user.profile.attendanceRate
+    attendanceRate: user.profile.attendanceRate,
+    points: user.profile.reservationsDone * 100 + Math.round(user.profile.hoursOnCourt * 20) + user.profile.achievementsUnlocked * 250,
+    achievements: user.profile.achievementsUnlocked
   }))
   .sort((a, b) => b.hours - a.hours);
 
 export const settings: Settings = {
   company: 'PlaySpace Club',
+  legalName: 'PlaySpace Gestão Esportiva Ltda.',
+  companyEmail: 'contato@playspace.com',
+  companyPhone: '(11) 4000-2026',
+  address: 'São Paulo - SP',
+  timezone: 'America/Sao_Paulo',
+  openingTime: '08:00',
+  closingTime: '22:00',
   hours: '08:00 - 22:00',
+  operatingDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'],
   cancelationRuleHours: 2,
   minimumReservationMinutes: 60,
+  maximumAdvanceDays: 90,
+  slotMinutes: 60,
   modalities: ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'],
   defaultPrices: {
     'Beach Tennis': 120,
@@ -411,8 +474,37 @@ export const settings: Settings = {
     Tênis: 115,
     Vôlei: 95,
     Basquete: 90
-  }
+  },
+  acceptPix: true,
+  acceptCard: true,
+  acceptCash: false,
+  pixKey: 'contato@playspace.com',
+  emailNotifications: true,
+  browserNotifications: true,
+  reservationReminderHours: 2,
+  primaryColor: '#0F766E',
+  defaultTheme: 'SYSTEM',
+  minimumPasswordLength: 8,
+  sessionMinutes: 120,
+  requireStrongPassword: true,
+  publicRegistrationEnabled: true
 };
+
+export const userPreferences: PlaySpaceState['userPreferences'] = Object.fromEntries(
+  users.map((user) => [user.id, {
+    theme: 'SYSTEM',
+    notificationsEnabled: true,
+    reservationReminderHours: 2,
+    emailNotifications: true,
+    browserNotifications: true,
+    defaultCity: user.profile.city,
+    favoriteModalities: [user.profile.favoriteModality],
+    preferredTimes: user.role === 'CLIENTE' ? 'Dias úteis, das 18:00 às 21:00' : '',
+    privateProfile: false,
+    discoverableByPartners: user.role === 'CLIENTE',
+    language: 'pt-BR'
+  }])
+);
 
 export const initialState: PlaySpaceState = {
   users,
@@ -424,10 +516,14 @@ export const initialState: PlaySpaceState = {
   achievements,
   posts,
   partnerAds,
+  sportsProfiles,
+  partnerInterests,
   championships,
+  championshipEnrollments,
   reviews,
   ranking,
   settings,
+  userPreferences,
   preferences: {
     theme: 'dark',
     favoriteModalities: ['Beach Tennis'],

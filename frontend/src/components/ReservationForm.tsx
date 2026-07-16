@@ -1,11 +1,18 @@
 import { AlertCircle, CalendarClock, CheckCircle2, CreditCard, LoaderCircle, Users, WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppData } from '../contexts/AppDataContext';
-import type { PaymentMethod, ReservationFormInput, User } from '../lib/types';
+import type { PaymentMethod, ReservationFormInput, User, WeekDay } from '../lib/types';
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const dateIso = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+const todayIso = () => dateIso(new Date());
 const activeStatuses = ['Pendente', 'Confirmada', 'Em andamento'];
 const paymentMethods: PaymentMethod[] = ['PIX', 'Cartão de Crédito', 'Cartão de Débito'];
+const weekDays: WeekDay[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -15,19 +22,41 @@ const minutesBetween = (start: string, end: string) => {
   return eh * 60 + em - (sh * 60 + sm);
 };
 
+const minutesFromTime = (time: string) => {
+  const [hours = 0, minutes = 0] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+const timeFromMinutes = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
 export function ReservationForm({ actor, onCreated, initialValues }: { actor: User; onCreated: (reservationId: string) => void; initialValues?: Partial<ReservationFormInput> }) {
   const { state, dataSource, createReservation, ensureAvailabilityRange } = useAppData();
+  const openingTime = state.settings.openingTime ?? state.settings.hours.split(' - ')[0] ?? '08:00';
+  const closingTime = state.settings.closingTime ?? state.settings.hours.split(' - ')[1] ?? '22:00';
+  const openingMinutes = minutesFromTime(openingTime);
+  const closingMinutes = minutesFromTime(closingTime);
+  const slotMinutes = Math.max(15, state.settings.slotMinutes ?? 60);
+  const minimumReservationMinutes = Math.max(15, state.settings.minimumReservationMinutes || slotMinutes);
+  const maximumAdvanceDays = Math.max(1, state.settings.maximumAdvanceDays ?? 90);
+  const operatingDays = state.settings.operatingDays ?? weekDays;
+  const maxDate = dateIso(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + maximumAdvanceDays));
+  const preferredStartMinutes = Math.max(openingMinutes, openingMinutes + Math.ceil((18 * 60 - openingMinutes) / slotMinutes) * slotMinutes);
+  const defaultStartMinutes = preferredStartMinutes + minimumReservationMinutes <= closingMinutes ? preferredStartMinutes : openingMinutes;
   const availableCourts = state.courts.filter((court) => court.status === 'Disponível');
-  const [form, setForm] = useState<ReservationFormInput>({
-    clientId: actor.role === 'ADMIN' ? state.users.find((user) => user.role === 'CLIENTE')?.id : actor.id,
-    courtId: availableCourts[0]?.id ?? '',
-    date: todayIso(),
-    startTime: '18:00',
-    endTime: '19:00',
-    players: 4,
-    paymentMethod: 'PIX',
-    notes: '',
-    ...initialValues
+  const [form, setForm] = useState<ReservationFormInput>(() => {
+    const startTime = initialValues?.startTime ?? timeFromMinutes(defaultStartMinutes);
+    const endTime = initialValues?.endTime ?? timeFromMinutes(Math.min(minutesFromTime(startTime) + minimumReservationMinutes, closingMinutes));
+    return {
+      clientId: actor.role === 'ADMIN' ? state.users.find((user) => user.role === 'CLIENTE')?.id : actor.id,
+      courtId: availableCourts[0]?.id ?? '',
+      date: todayIso(),
+      players: 4,
+      paymentMethod: 'PIX',
+      notes: '',
+      ...initialValues,
+      startTime,
+      endTime
+    };
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -91,15 +120,21 @@ export function ReservationForm({ actor, onCreated, initialValues }: { actor: Us
 
   const validation = useMemo(() => {
     const messages: string[] = [];
+    const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(form.date) ? new Date(`${form.date}T12:00:00`) : null;
     if (!form.courtId) messages.push('Selecione uma quadra disponível.');
     if (!form.clientId) messages.push('Selecione um cliente para a reserva.');
     if (durationMinutes <= 0) messages.push('O horário final deve ser maior que o inicial.');
-    if (form.startTime < '08:00' || form.endTime > '22:00') messages.push('Reservas permitidas apenas entre 08:00 e 22:00.');
+    if (durationMinutes > 0 && durationMinutes < minimumReservationMinutes) messages.push(`A duração mínima da reserva é de ${minimumReservationMinutes} minutos.`);
+    if (form.startTime < openingTime || form.endTime > closingTime) messages.push(`Reservas permitidas apenas entre ${openingTime} e ${closingTime}.`);
+    if ((minutesFromTime(form.startTime) - openingMinutes) % slotMinutes !== 0) messages.push(`O horário inicial deve seguir intervalos de ${slotMinutes} minutos a partir das ${openingTime}.`);
+    if (!selectedDate) messages.push('Informe uma data válida.');
+    if (selectedDate && !operatingDays.includes(weekDays[selectedDate.getDay()])) messages.push('A unidade não funciona no dia da semana selecionado.');
+    if (form.date > maxDate) messages.push(`Reservas podem ser feitas com no máximo ${maximumAdvanceDays} dias de antecedência.`);
     if (new Date(`${form.date}T${form.startTime}:00`).getTime() < Date.now()) messages.push('Escolha um horário futuro.');
     if (selectedCourt && form.players > selectedCourt.playerCapacity) messages.push(`Capacidade máxima: ${selectedCourt.playerCapacity} jogadores.`);
     if (conflict) messages.push(`Conflito com ${conflict.code} (${conflict.startTime} - ${conflict.endTime}).`);
     return messages;
-  }, [conflict, durationMinutes, form.clientId, form.courtId, form.date, form.endTime, form.players, form.startTime, selectedCourt]);
+  }, [closingTime, conflict, durationMinutes, form.clientId, form.courtId, form.date, form.endTime, form.players, form.startTime, maxDate, maximumAdvanceDays, minimumReservationMinutes, openingMinutes, openingTime, operatingDays, selectedCourt, slotMinutes]);
 
   const availabilityReady = dataSource !== 'api' || (availabilityState === 'ready' && verifiedDate === form.date);
 
@@ -155,15 +190,17 @@ export function ReservationForm({ actor, onCreated, initialValues }: { actor: Us
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           Data
-          <input className="form-control" type="date" min={todayIso()} value={form.date} onChange={(event) => update('date', event.target.value)} aria-label="Data da reserva" />
+          <input className="form-control" type="date" min={todayIso()} max={maxDate} value={form.date} onChange={(event) => update('date', event.target.value)} aria-label="Data da reserva" />
+          <span className="text-xs font-normal text-muted">Até {maximumAdvanceDays} dias de antecedência.</span>
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           Início
-          <input className="form-control" type="time" min="08:00" max="22:00" step="3600" value={form.startTime} onChange={(event) => update('startTime', event.target.value)} aria-label="Horário inicial" />
+          <input className="form-control" type="time" min={openingTime} max={closingTime} step={slotMinutes * 60} value={form.startTime} onChange={(event) => update('startTime', event.target.value)} aria-label="Horário inicial" />
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           Fim
-          <input className="form-control" type="time" min="08:00" max="22:00" step="3600" value={form.endTime} onChange={(event) => update('endTime', event.target.value)} aria-label="Horário final" />
+          <input className="form-control" type="time" min={openingTime} max={closingTime} step={slotMinutes * 60} value={form.endTime} onChange={(event) => update('endTime', event.target.value)} aria-label="Horário final" />
+          <span className="text-xs font-normal text-muted">Funcionamento: {openingTime}–{closingTime}. Duração mínima: {minimumReservationMinutes} min.</span>
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           Jogadores

@@ -105,11 +105,11 @@ public class DataSeeder implements CommandLineRunner {
         users.saveAll(List.of(admin, cliente, lucas, carlos, bia, joao));
 
         var courtList = List.of(
-                court("Quadra Aurora", Modality.BEACH_TENNIS, "Areia premium, iluminacao profissional e arquibancada compacta.", 120, 4, CourtStatus.DISPONIVEL, "Setor A", true, false, 4.9),
+                court("Quadra Aurora", Modality.BEACH_TENNIS, "Areia premium, iluminação profissional e arquibancada compacta.", 120, 4, CourtStatus.DISPONIVEL, "Setor A", true, false, 4.9),
                 court("Quadra Pulse", Modality.FUTEVOLEI, "Espaco aberto com rede oficial, piso drenante e visual de clube.", 110, 6, CourtStatus.DISPONIVEL, "Setor B", true, false, 4.7),
                 court("Arena Summit", Modality.SOCIETY, "Campo society coberto com grama sintetica nova e placar digital.", 180, 12, CourtStatus.DISPONIVEL, "Setor C", true, true, 4.8),
-                court("Studio Tenis", Modality.TENIS, "Quadra rapida com marcacao profissional e area tecnica.", 115, 4, CourtStatus.DISPONIVEL, "Setor D", true, true, 4.6),
-                court("Hangar Volei", Modality.VOLEI, "Quadra coberta com pe direito alto, piso modular e ventilacao.", 95, 12, CourtStatus.EM_MANUTENCAO, "Setor E", true, true, 4.4),
+                court("Studio Tênis", Modality.TENIS, "Quadra rápida com marcação profissional e área técnica.", 115, 4, CourtStatus.DISPONIVEL, "Setor D", true, true, 4.6),
+                court("Hangar Vôlei", Modality.VOLEI, "Quadra coberta com pé-direito alto, piso modular e ventilação.", 95, 12, CourtStatus.EM_MANUTENCAO, "Setor E", true, true, 4.4),
                 court("Court Neon", Modality.BASQUETE, "Meia quadra urbana para treinos, duelos e eventos noturnos.", 90, 10, CourtStatus.DISPONIVEL, "Setor F", true, false, 4.5)
         );
         courts.saveAll(courtList);
@@ -153,7 +153,7 @@ public class DataSeeder implements CommandLineRunner {
         user.setPassword(passwordEncoder.encode(password));
         user.setRole(role);
         user.setCity(city);
-        user.setBio(role == Role.ADMIN ? "Gestor PlaySpace focado em operacao e experiencia premium." : "Jogador PlaySpace apaixonado por esporte, comunidade e bons horarios.");
+        user.setBio(role == Role.ADMIN ? "Gestor PlaySpace focado em operação e experiência premium." : "Jogador PlaySpace apaixonado por esporte, comunidade e bons horários.");
         user.setMemberSince(LocalDate.now().minusMonths(8));
         user.setFavoriteModality(favoriteModality);
         user.setSportsLevel(level);
@@ -161,7 +161,7 @@ public class DataSeeder implements CommandLineRunner {
         user.setMatchesPlayed(role == Role.ADMIN ? 0 : 18 + Math.abs(name.hashCode() % 35));
         user.setHoursOnCourt(role == Role.ADMIN ? 0 : 24 + Math.abs(name.hashCode() % 80));
         user.setAttendanceRate(role == Role.ADMIN ? 100 : 86 + Math.abs(name.hashCode() % 13));
-        user.setPracticedSports(Set.of("Beach Tennis", "Society", "Tenis"));
+        user.setPracticedSports(Set.of("Beach Tennis", "Society", "Tênis"));
         user.setAchievements(Set.of("Primeira Reserva", "Sequencia Ativa"));
         return user;
     }
@@ -197,7 +197,7 @@ public class DataSeeder implements CommandLineRunner {
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP));
         reservation.setStatus(status);
         reservation.setPaymentMethod(method);
-        reservation.setNotes("Reserva demo gerada para apresentacao do portfolio.");
+        reservation.setNotes("Reserva demo gerada para apresentação do portfólio.");
         reservation.setHistory("Seed demo criado; status inicial " + status + ".");
         return reservation;
     }
@@ -231,9 +231,9 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedNotifications(List<AppUser> clients) {
         clients.forEach(client -> {
-            notifications.create(client, "Quadra favorita disponivel", "A Quadra Aurora liberou horarios hoje as 18:00.", "RECOMENDACAO");
-            notifications.create(client, "Novo campeonato", "Open PlaySpace de Beach Tennis esta com inscricoes abertas.", "CAMPEONATO");
-            notifications.create(client, "Nova conquista", "Voce esta perto de desbloquear Cliente VIP.", "GAMIFICACAO");
+            notifications.create(client, "Quadra favorita disponível", "A Quadra Aurora liberou horários hoje às 18:00.", "RECOMENDAÇÃO");
+            notifications.create(client, "Novo campeonato", "Open PlaySpace de Beach Tennis está com inscrições abertas.", "CAMPEONATO");
+            notifications.create(client, "Nova conquista", "Você está perto de desbloquear Cliente VIP.", "GAMIFICAÇÃO");
         });
     }
 
@@ -242,9 +242,9 @@ public class DataSeeder implements CommandLineRunner {
                 activity("Sistema", "Seed de dados demo executado", "AUDITORIA"),
                 activity("Marina Costa", "Pagamento PIX aprovado", "PAGAMENTO"),
                 activity("Lucas Alves", "Nova reserva na Arena Summit", "RESERVA"),
-                activity("Equipe", "Hangar Volei marcado como manutencao", "QUADRA"),
+                activity("Equipe", "Hangar Vôlei marcado como em manutenção", "QUADRA"),
                 activity("Carlos Nunes", "Anuncio para parceiro publicado", "COMUNIDADE"),
-                activity("Beatriz Lima", "Avaliacao 5 estrelas registrada", "AVALIACAO")
+                activity("Beatriz Lima", "Avaliação de 5 estrelas registrada", "AVALIAÇÃO")
         ).forEach(activities::save);
     }
 
@@ -259,7 +259,7 @@ public class DataSeeder implements CommandLineRunner {
     private void seedAchievements(AppUser user) {
         List.of(
                 achievement(user, "Medal", "Primeira Reserva", "Criou a primeira reserva no PlaySpace.", 1, 1, LocalDate.now().minusMonths(7)),
-                achievement(user, "Sparkles", "Beach Tennis Lover", "Reservou 10 horarios de Beach Tennis.", 8, 10, null),
+                achievement(user, "Sparkles", "Beach Tennis Lover", "Reservou 10 horários de Beach Tennis.", 8, 10, null),
                 achievement(user, "Flame", "Sequencia de 10 jogos", "Mantenha uma sequencia de 10 jogos.", 6, 10, null),
                 achievement(user, "Gem", "Cliente VIP", "Complete 25 reservas confirmadas.", 21, 25, null),
                 achievement(user, "Trophy", "100 horas em quadra", "Alcance 100 horas acumuladas.", 74, 100, null)
@@ -341,7 +341,7 @@ public class DataSeeder implements CommandLineRunner {
         review.setService(5);
         review.setCourtQuality(5);
         review.setAverage(4.8);
-        review.setComment("Estrutura excelente, check-in rapido e iluminacao perfeita para jogo noturno.");
+        review.setComment("Estrutura excelente, check-in rápido e iluminação perfeita para jogo noturno.");
         reviews.save(review);
     }
 }

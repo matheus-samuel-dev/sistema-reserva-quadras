@@ -20,8 +20,8 @@ import {
   Volleyball,
   Zap
 } from 'lucide-react';
-import { FormEvent, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -37,7 +37,8 @@ import { Toast } from '../../components/Toast';
 import { WeeklyCalendar } from '../../components/WeeklyCalendar';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Modality, PartnerAd, Reservation, ReservationFormInput } from '../../lib/types';
+import { fetchRankingWithApi, tokenFromStorage } from '../../lib/api';
+import type { Modality, PartnerAd, Payment, PaymentStatus, RankingEntry, Reservation, ReservationFormInput, Review } from '../../lib/types';
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
@@ -62,12 +63,16 @@ function ReservationCard({
   reservation,
   onDetails,
   onCancel,
-  onPay
+  onPay,
+  onReview,
+  reviewed
 }: {
   reservation: Reservation;
   onDetails?: () => void;
   onCancel?: () => void;
   onPay?: () => void;
+  onReview?: () => void;
+  reviewed?: boolean;
 }) {
   return (
     <article className="soft-panel card-hover rounded-lg p-4">
@@ -93,9 +98,49 @@ function ReservationCard({
         {onDetails && <button className="ghost-button rounded-lg px-3 py-2 text-sm font-semibold" onClick={onDetails}>Detalhes</button>}
         {onPay && reservation.status === 'Pendente' && <button className="neon-button rounded-lg px-3 py-2 text-sm font-bold" onClick={onPay}>Pagar</button>}
         {onCancel && !['Cancelada', 'Concluída'].includes(reservation.status) && <button className="ghost-button rounded-lg px-3 py-2 text-sm font-semibold" onClick={onCancel}>Cancelar</button>}
+        {onReview && reservation.status === 'Concluída' && !reviewed && <button className="neon-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold" onClick={onReview}><Star className="h-4 w-4" />Avaliar</button>}
+        {reservation.status === 'Concluída' && reviewed && <span className="inline-flex items-center gap-1 rounded-lg border border-amber/30 bg-amber/10 px-3 py-2 text-xs font-bold text-amber"><Star className="h-4 w-4 fill-current" />Avaliada</span>}
       </div>
     </article>
   );
+}
+
+function ClientReservationDetails({ reservation, payment }: { reservation: Reservation; payment?: Payment }) {
+  return <div className="grid gap-4">
+    <ReservationCard reservation={reservation} reviewed={false} />
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-lg border border-line p-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Forma de pagamento</p><p className="mt-1 font-bold">{reservation.paymentMethod}</p></div>
+      <div className="rounded-lg border border-line p-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Transação</p><p className="mt-1 break-all font-bold">{payment?.transactionCode || 'Aguardando pagamento'}</p></div>
+    </div>
+    {reservation.notes && <section className="rounded-lg border border-line p-4"><h3 className="text-sm font-black">Observações</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted">{reservation.notes}</p></section>}
+    <section><h3 className="text-sm font-black">Linha do tempo</h3><ol className="mt-3 grid gap-3">{reservation.history.length ? reservation.history.map((item, index) => <li key={`${item}-${index}`} className="relative ml-2 border-l border-neon/25 pb-1 pl-5 text-sm before:absolute before:-left-[5px] before:top-1 before:h-2.5 before:w-2.5 before:rounded-full before:bg-neon"><strong className="block">{item}</strong><span className="text-xs text-muted">Etapa {index + 1} de {reservation.history.length}</span></li>) : <li className="text-sm text-muted">Nenhum evento registrado.</li>}</ol></section>
+  </div>;
+}
+
+type ReviewScores = Pick<Review, 'cleaning' | 'lighting' | 'organization' | 'service' | 'courtQuality'>;
+const reviewCriteria: Array<[keyof ReviewScores, string]> = [
+  ['courtQuality', 'Qualidade da quadra'],
+  ['cleaning', 'Limpeza'],
+  ['lighting', 'Iluminação'],
+  ['organization', 'Organização'],
+  ['service', 'Atendimento']
+];
+
+function ReviewModal({ reservation, onClose, onSubmit }: { reservation: Reservation | null; onClose: () => void; onSubmit: (ratings: ReviewScores, comment: string) => Promise<void> }) {
+  const [ratings, setRatings] = useState<ReviewScores>({ cleaning: 0, lighting: 0, organization: 0, service: 0, courtQuality: 0 });
+  const [comment, setComment] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  if (!reservation) return null;
+  const average = Object.values(ratings).reduce((sum, score) => sum + score, 0) / reviewCriteria.length;
+  return <Modal title={`Avaliar ${reservation.courtName}`} open={Boolean(reservation)} onClose={onClose} maxWidth="max-w-xl"><form className="grid gap-4" onSubmit={async (event) => { event.preventDefault(); setError(''); if (Object.values(ratings).some((score) => score < 1)) { setError('Escolha uma nota para todos os critérios.'); return; } if (comment.trim().length < 3) { setError('Escreva um comentário com ao menos 3 caracteres.'); return; } setSaving(true); try { await onSubmit(ratings, comment); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível publicar a avaliação.'); } finally { setSaving(false); } }}>
+    <div className="rounded-lg border border-line bg-[var(--surface-2)] p-3 text-sm"><p className="font-bold">Reserva {reservation.code}</p><p className="mt-1 text-muted">{reservation.date} · {reservation.startTime}–{reservation.endTime}</p></div>
+    <div className="grid gap-3">{reviewCriteria.map(([key, label]) => <fieldset key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3"><legend className="sr-only">{label}</legend><span className="text-sm font-bold">{label}</span><div className="flex" role="radiogroup" aria-label={label}>{[1, 2, 3, 4, 5].map((score) => <button key={score} className={`grid min-h-11 min-w-10 place-items-center rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${ratings[key] >= score ? 'text-amber' : 'text-muted hover:text-amber'}`} type="button" role="radio" aria-checked={ratings[key] === score} aria-label={`${score} ${score === 1 ? 'estrela' : 'estrelas'}`} onClick={() => setRatings({ ...ratings, [key]: score })}><Star className={`h-5 w-5 ${ratings[key] >= score ? 'fill-current' : ''}`} /></button>)}</div></fieldset>)}</div>
+    <div className="flex items-center justify-between rounded-lg border border-amber/25 bg-amber/10 p-3"><span className="text-sm font-bold">Média da avaliação</span><strong className="inline-flex items-center gap-1 text-lg text-amber"><Star className="h-5 w-5 fill-current" />{average > 0 ? average.toFixed(1) : '—'}</strong></div>
+    <label className="grid gap-2 text-sm font-bold">Comentário<textarea className="app-input min-h-28 resize-y" value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1200} placeholder="Conte como foi sua experiência." required /></label>
+    {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
+    <div className="flex flex-wrap justify-end gap-2"><button className="ghost-button min-h-11 rounded-lg px-4 py-2 font-bold" type="button" onClick={onClose}>Cancelar</button><button className="neon-button min-h-11 rounded-lg px-4 py-2 font-black disabled:opacity-60" type="submit" disabled={saving}>{saving ? 'Publicando...' : 'Publicar avaliação'}</button></div>
+  </form></Modal>;
 }
 
 export function ClientHomePage() {
@@ -171,18 +216,31 @@ export function ClientHomePage() {
 
 export function ClientReservationsPage() {
   const { user } = useAuth();
-  const { state, cancelReservation } = useAppData();
+  const { state, cancelReservation, submitReview } = useAppData();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<'Próximas' | 'Histórico'>('Próximas');
   const [selected, setSelected] = useState<Reservation | null>(null);
   const [paying, setPaying] = useState<Reservation | null>(null);
   const [canceling, setCanceling] = useState<Reservation | null>(null);
+  const [reviewing, setReviewing] = useState<Reservation | null>(null);
   const [toast, setToast] = useState('');
   const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
   const today = new Date().toISOString().slice(0, 10);
   const list = state.reservations
     .filter((reservation) => reservation.clientId === user?.id)
     .filter((reservation) => tab === 'Próximas' ? reservation.date >= today && reservation.status !== 'Cancelada' : reservation.date < today || ['Cancelada', 'Concluída'].includes(reservation.status));
+  const reviewedReservationIds = useMemo(() => new Set(state.reviews.map((item) => item.reservationId).filter(Boolean)), [state.reviews]);
+
+  useEffect(() => {
+    const reservationId = searchParams.get('reserva');
+    if (!reservationId || !user) return;
+    const reservation = state.reservations.find((item) => item.id === reservationId && item.clientId === user.id);
+    if (reservation) setSelected(reservation);
+    const next = new URLSearchParams(searchParams);
+    next.delete('reserva');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, state.reservations, user]);
 
   const confirmCancel = async () => {
     if (!canceling || !user) return;
@@ -212,12 +270,15 @@ export function ClientReservationsPage() {
             onDetails={() => setSelected(reservation)}
             onPay={() => setPaying(reservation)}
             onCancel={() => setCanceling(reservation)}
+            onReview={() => setReviewing(reservation)}
+            reviewed={reviewedReservationIds.has(reservation.id)}
           />
         ))}
       </div>
       {list.length === 0 && <EmptyState title="Nenhuma reserva nesta aba" description="As reservas aparecerão aqui automaticamente quando você criar ou concluir jogos." actionLabel="Nova reserva" onAction={() => navigate('/app/nova-reserva')} />}
-      <Modal title="Detalhes da reserva" open={Boolean(selected)} onClose={() => setSelected(null)}>{selected && <ReservationCard reservation={selected} />}</Modal>
+      <Modal title="Detalhes da reserva" open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="max-w-2xl">{selected && <ClientReservationDetails reservation={selected} payment={state.payments.find((item) => item.reservationId === selected.id)} />}</Modal>
       <Modal title="Pagamento demo" open={Boolean(paying)} onClose={() => setPaying(null)}>{paying && <PaymentFlow reservation={paying} onPaid={() => { setPaying(null); setToastTone('success'); setToast('Pagamento aprovado. Reserva confirmada.'); }} />}</Modal>
+      <ReviewModal key={reviewing?.id ?? 'review-closed'} reservation={reviewing} onClose={() => setReviewing(null)} onSubmit={async (ratings, comment) => { if (!reviewing || !user) return; await submitReview(reviewing.id, ratings, comment, user); setReviewing(null); setToastTone('success'); setToast('Avaliação publicada com sucesso.'); }} />
       <ConfirmDialog open={Boolean(canceling)} title="Cancelar reserva" description={`Confirme o cancelamento da reserva ${canceling?.code ?? ''}.`} confirmLabel="Cancelar reserva" onClose={() => setCanceling(null)} onConfirm={confirmCancel} />
       <Toast message={toast} tone={toastTone} onClose={() => setToast('')} />
     </>
@@ -262,9 +323,14 @@ export function ClientCourtsPage() {
         </label>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((court) => (
+        {filtered.map((court) => {
+          const courtReviews = state.reviews.filter((review) => review.courtName === court.name);
+          const averageRating = courtReviews.length
+            ? courtReviews.reduce((sum, review) => sum + review.average, 0) / courtReviews.length
+            : court.rating;
+          return (
           <article key={court.id} className="glass-panel card-hover overflow-hidden rounded-lg">
-            <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} className="aspect-[16/8] border-b border-line" />
+            <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} image={court.image} className="aspect-[16/8] border-b border-line" />
             <div className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -276,13 +342,26 @@ export function ClientCourtsPage() {
                 </button>
               </div>
               <p className="mt-3 min-h-10 text-sm text-muted">{court.description}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" aria-label={averageRating > 0 ? `Média ${averageRating.toFixed(1)} de 5` : 'Quadra ainda sem avaliações'}>
+                <span className={`inline-flex items-center gap-1 font-bold ${averageRating > 0 ? 'text-amber' : 'text-muted'}`}>
+                  <Star className={`h-4 w-4 ${averageRating > 0 ? 'fill-current' : ''}`} aria-hidden="true" />
+                  {averageRating > 0 ? `Média ${averageRating.toFixed(1)}` : 'Sem avaliações'}
+                </span>
+                {courtReviews.length > 0 && <span className="text-xs text-muted">({courtReviews.length} {courtReviews.length === 1 ? 'avaliação' : 'avaliações'})</span>}
+              </div>
+              <ul className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3" aria-label="Infraestrutura da quadra">
+                <li className="rounded-lg border border-line px-2.5 py-2">{court.covered ? 'Coberta' : 'Ao ar livre'}</li>
+                <li className="rounded-lg border border-line px-2.5 py-2">{court.lighting ? 'Com iluminação' : 'Sem iluminação'}</li>
+                <li className="col-span-2 rounded-lg border border-line px-2.5 py-2 sm:col-span-1">Até {court.playerCapacity} jogadores</li>
+              </ul>
               <div className="mt-4 flex items-center justify-between">
                 <strong className="text-neon">{currency(court.pricePerHour)}/h</strong>
                 <StatusBadge status={court.status} compact />
               </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
       {filtered.length === 0 && <EmptyState title="Nenhuma quadra encontrada" description="Ajuste a busca ou remova o filtro de disponibilidade." />}
     </>
@@ -314,15 +393,47 @@ export function ClientPaymentsPage() {
   const { user } = useAuth();
   const { state } = useAppData();
   const [query, setQuery] = useState('');
-  const payments = state.payments.filter((payment) => state.reservations.find((reservation) => reservation.id === payment.reservationId)?.clientId === user?.id);
-  const filtered = payments.filter((payment) => `${payment.reservationCode} ${payment.method} ${payment.transactionCode}`.toLowerCase().includes(query.toLowerCase()));
+  const [status, setStatus] = useState<PaymentStatus | 'Todos'>('Todos');
+  const [selected, setSelected] = useState<Payment | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const payments = useMemo(() => state.payments.filter((payment) => state.reservations.find((reservation) => reservation.id === payment.reservationId)?.clientId === user?.id), [state.payments, state.reservations, user?.id]);
+  const filtered = payments.filter((payment) => `${payment.reservationCode} ${payment.method} ${payment.transactionCode}`.toLowerCase().includes(query.toLowerCase()) && (status === 'Todos' || payment.status === status));
+  useEffect(() => {
+    const paymentId = searchParams.get('pagamento');
+    if (!paymentId) return;
+    const payment = payments.find((item) => item.id === paymentId);
+    if (payment) setSelected(payment);
+    const next = new URLSearchParams(searchParams);
+    next.delete('pagamento');
+    setSearchParams(next, { replace: true });
+  }, [payments, searchParams, setSearchParams]);
+  const downloadReceipt = (payment: Payment) => {
+    const content = [
+      'PLAYSPACE — COMPROVANTE DEMONSTRATIVO',
+      `Transação: ${payment.transactionCode}`,
+      `Reserva: ${payment.reservationCode}`,
+      `Método: ${payment.method}`,
+      `Valor: ${currency(payment.amount)}`,
+      `Status: ${payment.status}`,
+      `Pago em: ${payment.paidAt ? new Date(payment.paidAt).toLocaleString('pt-BR') : 'Não confirmado'}`,
+      ...(payment.refundedAt ? [`Estornado em: ${new Date(payment.refundedAt).toLocaleString('pt-BR')}`] : []),
+      '',
+      'Documento sem valor fiscal. Nenhuma movimentação financeira real foi realizada.'
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `comprovante-${payment.transactionCode}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   return (
     <>
-      <ClientHeader title="Pagamentos" subtitle="Histórico de pagamentos PIX e cartões em modo demo." />
-      <IconField wrapperClassName="mb-4" label="Buscar pagamentos" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Reserva, método ou transação" />
+      <ClientHeader title="Pagamentos" subtitle="Histórico, status e comprovantes de pagamentos PIX e cartões em modo demo." />
+      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"><IconField label="Buscar pagamentos" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Reserva, método ou transação" /><label className="grid gap-2 text-sm font-bold">Status<select className="form-control min-w-44" value={status} onChange={(event) => setStatus(event.target.value as PaymentStatus | 'Todos')}><option>Todos</option><option>Pendente</option><option>Aprovado</option><option>Recusado</option><option>Cancelado</option></select></label></div>
       <div className="grid gap-3">
         {filtered.map((payment) => (
-          <div key={payment.id} className="glass-panel card-hover flex items-center justify-between gap-3 rounded-lg p-4">
+          <div key={payment.id} className="glass-panel card-hover flex flex-wrap items-center justify-between gap-3 rounded-lg p-4">
             <div>
               <p className="font-black">{payment.reservationCode}</p>
               <p className="text-sm text-muted">{payment.method} · {payment.transactionCode}</p>
@@ -330,11 +441,13 @@ export function ClientPaymentsPage() {
             <div className="text-right">
               <p className="font-bold">{currency(payment.amount)}</p>
               <StatusBadge status={payment.status} compact />
+              <button className="ghost-button mt-2 min-h-10 rounded-lg px-3 py-2 text-xs font-bold text-neon" onClick={() => setSelected(payment)}>Ver comprovante</button>
             </div>
           </div>
         ))}
       </div>
       {filtered.length === 0 && <EmptyState title="Nenhum pagamento encontrado" description="Pagamentos aparecem aqui após uma reserva ser processada." />}
+      <Modal title="Comprovante demonstrativo" open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="max-w-lg">{selected && <div className="grid gap-3"><div className="soft-panel rounded-lg p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted">Transação</p><p className="mt-1 break-all text-xl font-black">{selected.transactionCode}</p></div>{[['Reserva', selected.reservationCode], ['Método', selected.method], ['Valor', currency(selected.amount)], ['Pago em', selected.paidAt ? new Date(selected.paidAt).toLocaleString('pt-BR') : 'Aguardando confirmação'], ...(selected.refundedAt ? [['Estornado em', new Date(selected.refundedAt).toLocaleString('pt-BR')]] : [])].map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 text-sm"><span className="text-muted">{label}</span><strong className="text-right">{value}</strong></div>)}<div className="flex items-center justify-between rounded-lg border border-line p-3"><span className="text-sm text-muted">Status</span><StatusBadge status={selected.status} /></div><p className="rounded-lg border border-cyan/25 bg-cyan/10 p-3 text-xs text-cyan">Documento demonstrativo, sem valor fiscal e sem movimentação financeira real.</p><div className="flex flex-wrap justify-end gap-2"><button className="ghost-button min-h-11 rounded-lg px-4 py-2 font-bold" onClick={() => window.print()}>Imprimir</button><button className="neon-button min-h-11 rounded-lg px-4 py-2 font-black" onClick={() => downloadReceipt(selected)}>Baixar comprovante</button></div></div>}</Modal>
     </>
   );
 }
@@ -447,27 +560,62 @@ export function ClientCommunityPage() {
 }
 
 export function ClientRankingPage() {
-  const { state } = useAppData();
+  const { state, dataSource } = useAppData();
   const [period, setPeriod] = useState<'Semanal' | 'Mensal' | 'Anual'>('Mensal');
-  const ranking = [...state.ranking].sort((a, b) => b.hours - a.hours);
-  const divisor = period === 'Semanal' ? 52 : period === 'Mensal' ? 12 : 1;
+  const [modality, setModality] = useState<Modality | 'Todas'>('Todas');
+  const [remoteRanking, setRemoteRanking] = useState<RankingEntry[] | null>(null);
+  const [selected, setSelected] = useState<RankingEntry | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const demoRanking = useMemo(() => {
+    const today = new Date();
+    const start = new Date(today);
+    if (period === 'Semanal') start.setDate(today.getDate() - 6);
+    else if (period === 'Mensal') start.setDate(1);
+    else start.setMonth(0, 1);
+    const startIso = start.toISOString().slice(0, 10);
+    const todayIso = today.toISOString().slice(0, 10);
+    return state.ranking.map((player) => {
+      const reservations = state.reservations.filter((item) => item.clientId === player.id && item.date >= startIso && item.date <= todayIso && !['Cancelada', 'Pendente'].includes(item.status) && (modality === 'Todas' || item.modality === modality));
+      const hours = reservations.reduce((sum, item) => { const [startHour, startMinute] = item.startTime.split(':').map(Number); const [endHour, endMinute] = item.endTime.split(':').map(Number); return sum + (endHour * 60 + endMinute - startHour * 60 - startMinute) / 60; }, 0);
+      const achievements = (state.achievements[player.id] ?? []).filter((item) => item.percent >= 100).length;
+      return { ...player, reservations: reservations.length, hours, achievements, points: reservations.length * 100 + Math.round(hours * 20) + achievements * 250 };
+    }).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  }, [modality, period, state.achievements, state.ranking, state.reservations]);
+
+  useEffect(() => {
+    if (dataSource !== 'api') { setRemoteRanking(null); return; }
+    const token = tokenFromStorage();
+    if (!token) return;
+    setLoading(true); setError('');
+    const apiPeriod = period === 'Semanal' ? 'WEEKLY' : period === 'Anual' ? 'ANNUAL' : 'MONTHLY';
+    void fetchRankingWithApi(apiPeriod, modality, token)
+      .then(setRemoteRanking)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Não foi possível carregar o ranking.'))
+      .finally(() => setLoading(false));
+  }, [dataSource, modality, period]);
+  const ranking = dataSource === 'api' && remoteRanking ? remoteRanking : demoRanking;
   return (
     <>
-      <ClientHeader title="Ranking da comunidade" subtitle="Filtros semanal, mensal e anual com reservas, horas e frequência." />
-      <div className="mb-4 flex flex-wrap gap-2">{(['Semanal', 'Mensal', 'Anual'] as const).map((item) => <button key={item} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-bold ${period === item ? 'border-neon bg-neon/10 text-neon' : 'border-line text-muted'}`} onClick={() => setPeriod(item)} aria-pressed={period === item}>{item}</button>)}</div>
+      <ClientHeader title="Ranking da comunidade" subtitle="Pontuação calculada por jogos, horas e conquistas, com filtros reais de período e modalidade." />
+      <div className="mb-4 flex flex-wrap items-end gap-3"><div className="flex flex-wrap gap-2">{(['Semanal', 'Mensal', 'Anual'] as const).map((item) => <button key={item} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-bold ${period === item ? 'border-neon bg-neon/10 text-neon' : 'border-line text-muted'}`} onClick={() => setPeriod(item)} aria-pressed={period === item}>{item}</button>)}</div><label className="grid min-w-48 gap-2 text-sm font-bold">Modalidade<select className="form-control" value={modality} onChange={(event) => setModality(event.target.value as Modality | 'Todas')}><option>Todas</option>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label></div>
+      {loading && <p className="mb-4 rounded-lg border border-line p-3 text-sm text-muted" role="status">Atualizando ranking...</p>}
+      {error && <p className="mb-4 rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
       <div className="grid gap-3">
         {ranking.map((player, index) => (
-          <div key={player.id} className="glass-panel card-hover flex min-w-0 max-w-full items-center gap-3 rounded-lg p-4 sm:gap-4">
+          <button key={player.id} className="glass-panel card-hover flex min-w-0 max-w-full items-center gap-3 rounded-lg p-4 text-left sm:gap-4" onClick={() => setSelected(player)} aria-label={`Ver perfil de ${player.name}`}>
             <strong className="grid h-10 w-10 place-items-center rounded-full bg-neon/15 text-neon">#{index + 1}</strong>
             <Avatar name={player.name} src={state.users.find((user) => user.id === player.id)?.profile.photo} size={44} />
             <div className="min-w-0 flex-1">
               <p className="font-black leading-tight">{player.name}</p>
-              <p className="mt-0.5 text-xs leading-4 text-muted sm:text-sm sm:leading-5">{player.favoriteModality} · {player.attendanceRate}% comparecimento</p>
+              <p className="mt-0.5 text-xs leading-4 text-muted sm:text-sm sm:leading-5">{player.favoriteModality} · {player.reservations} jogos · {player.hours.toFixed(1)}h</p>
             </div>
-            <strong className="ml-auto shrink-0 text-right">{(player.hours / divisor).toFixed(period === 'Anual' ? 0 : 1)}h <span className="block text-[10px] font-semibold text-muted">{period.toLowerCase()}</span></strong>
-          </div>
+            <strong className="ml-auto shrink-0 text-right text-neon">{player.points.toLocaleString('pt-BR')} <span className="block text-[10px] font-semibold text-muted">pontos</span></strong>
+          </button>
         ))}
       </div>
+      {ranking.length === 0 && <EmptyState title="Ranking sem resultados" description="Não há jogos válidos para os filtros selecionados." />}
+      <Modal title="Perfil no ranking" open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="max-w-lg">{selected && <div className="grid gap-4"><div className="flex items-center gap-3"><Avatar name={selected.name} src={state.users.find((item) => item.id === selected.id)?.profile.photo} size={64} /><div><h2 className="text-xl font-black">{selected.name}</h2><p className="text-sm text-muted">{selected.city} · {selected.favoriteModality}</p></div></div><div className="grid grid-cols-2 gap-3">{[['Pontos', selected.points.toLocaleString('pt-BR')], ['Jogos', String(selected.reservations)], ['Horas', selected.hours.toFixed(1)], ['Conquistas', String(selected.achievements)], ['Comparecimento', `${selected.attendanceRate}%`], ['Período', period]].map(([label, value]) => <div key={label} className="rounded-lg border border-line p-3"><p className="text-xs text-muted">{label}</p><strong className="mt-1 block">{value}</strong></div>)}</div></div>}</Modal>
     </>
   );
 }
@@ -538,7 +686,7 @@ export function ClientChampionshipsPage() {
       <div className="grid gap-4 md:grid-cols-2">
         {state.championships.map((championship) => (
           <article key={championship.id} className="glass-panel card-hover overflow-hidden rounded-lg">
-            {(() => { const court = state.courts.find((item) => item.modality === championship.modality); return court ? <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} className="aspect-[16/7] border-b border-line" /> : null; })()}
+            {(() => { const court = state.courts.find((item) => item.modality === championship.modality); return court ? <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} image={court.image} className="aspect-[16/7] border-b border-line" /> : null; })()}
             <div className="p-5"><p className="text-sm font-bold text-neon">{championship.status}</p>
             <h2 className="mt-2 text-2xl font-black">{championship.name}</h2>
             <p className="mt-2 text-muted">{championship.modality} · {championship.categories}</p>

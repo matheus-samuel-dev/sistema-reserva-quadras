@@ -42,7 +42,7 @@ class AuditServiceTest {
         var recorded = audit.record((String) null, "   ", null);
 
         assertThat(recorded.getActor()).isEqualTo("SISTEMA");
-        assertThat(recorded.getAction()).isEqualTo("Acao nao informada");
+        assertThat(recorded.getAction()).isEqualTo("Ação não informada");
         assertThat(recorded.getCategory()).isEqualTo("GERAL");
     }
 }

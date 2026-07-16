@@ -53,6 +53,13 @@ public class AppUser extends AuditableEntity {
     @Column(length = 255)
     private String bio;
     private String city;
+
+    @Column(length = 30)
+    private String phone;
+
+    @Column(length = 1000)
+    private String availability;
+
     private LocalDate memberSince;
 
     @Enumerated(EnumType.STRING)
@@ -144,6 +151,22 @@ public class AppUser extends AuditableEntity {
 
     public void setCity(String city) {
         this.city = city;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getAvailability() {
+        return availability;
+    }
+
+    public void setAvailability(String availability) {
+        this.availability = availability;
     }
 
     public LocalDate getMemberSince() {

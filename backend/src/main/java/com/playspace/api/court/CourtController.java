@@ -38,7 +38,7 @@ public class CourtController {
 
     @GetMapping("/{id}")
     Court get(@PathVariable Long id) {
-        return courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra nao encontrada."));
+        return courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra não encontrada."));
     }
 
     @PostMapping
@@ -55,7 +55,7 @@ public class CourtController {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public Court update(@PathVariable Long id, @Valid @RequestBody Court payload) {
-        var court = courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra nao encontrada."));
+        var court = courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra não encontrada."));
         court.setName(payload.getName());
         court.setModality(payload.getModality());
         court.setDescription(payload.getDescription());
@@ -77,7 +77,7 @@ public class CourtController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
     public void delete(@PathVariable Long id) {
-        var court = courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra nao encontrada."));
+        var court = courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra não encontrada."));
         court.setStatus(CourtStatus.INDISPONIVEL);
         courts.save(court);
         audit.record(currentUser.user(), "Inativou a quadra " + court.getName(), "QUADRA");

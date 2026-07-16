@@ -12,6 +12,7 @@ import com.playspace.api.court.CourtStatus;
 import com.playspace.api.notification.NotificationRepository;
 import com.playspace.api.security.AuthService;
 import com.playspace.api.security.LoginRequest;
+import com.playspace.api.settings.PlatformSettingsRepository;
 import com.playspace.api.user.UserRepository;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,61 @@ class AuthorizationIntegrationTest {
     @Autowired UserRepository users;
     @Autowired CourtRepository courts;
     @Autowired AuthService authService;
+    @Autowired PlatformSettingsRepository settings;
+
+    @Test
+    void publicRegistrationCreatesOnlyAnActiveClientWhenEnabled() throws Exception {
+        var platformSettings = settings.findFirstByOrderByIdAsc().orElseThrow();
+        platformSettings.setPublicRegistrationEnabled(true);
+        settings.saveAndFlush(platformSettings);
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Nova Jogadora",
+                                  "email":"nova-jogadora@playspace.com",
+                                  "password":"Cadastro@123",
+                                  "passwordConfirmation":"Cadastro@123",
+                                  "phone":"(11) 99999-0000",
+                                  "acceptedTerms":true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.user.email").value("nova-jogadora@playspace.com"))
+                .andExpect(jsonPath("$.user.role").value("CLIENTE"))
+                .andExpect(jsonPath("$.user.active").value(true));
+
+        var registered = users.findByEmailIgnoreCase("nova-jogadora@playspace.com").orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(registered.getRole()).isEqualTo(com.playspace.api.user.Role.CLIENTE);
+        org.assertj.core.api.Assertions.assertThat(registered.isActive()).isTrue();
+    }
+
+    @Test
+    void publicRegistrationHonorsTheAdministrativeSetting() throws Exception {
+        var platformSettings = settings.findFirstByOrderByIdAsc().orElseThrow();
+        platformSettings.setPublicRegistrationEnabled(false);
+        settings.saveAndFlush(platformSettings);
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Jogador bloqueado",
+                                  "email":"cadastro-bloqueado@playspace.com",
+                                  "password":"Cadastro@123",
+                                  "passwordConfirmation":"Cadastro@123",
+                                  "acceptedTerms":true
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Conflito"))
+                .andExpect(jsonPath("$.details[0]").value("O cadastro público está desativado no momento."));
+
+        org.assertj.core.api.Assertions.assertThat(users.existsByEmailIgnoreCase("cadastro-bloqueado@playspace.com"))
+                .isFalse();
+    }
 
     @Test
     @WithUserDetails("cliente@playspace.com")
@@ -114,7 +170,7 @@ class AuthorizationIntegrationTest {
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.error").value("Nao autenticado"));
+                .andExpect(jsonPath("$.error").value("Não autenticado"));
     }
 
     @Test
@@ -125,7 +181,7 @@ class AuthorizationIntegrationTest {
                                 {"email":null,"password":"Cliente@123"}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -133,7 +189,7 @@ class AuthorizationIntegrationTest {
                                 {"email":"   ","password":"Cliente@123"}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         var oversizedEmail = "a".repeat(245) + "@example.com";
         mvc.perform(post("/api/auth/login")
@@ -142,7 +198,7 @@ class AuthorizationIntegrationTest {
                                 {"email":"%s","password":"Cliente@123"}
                                 """.formatted(oversizedEmail)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -150,7 +206,7 @@ class AuthorizationIntegrationTest {
                                 {"email":"cliente@playspace.com","password":"%s"}
                                 """.formatted("p".repeat(73))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
     }
 
     @Test
@@ -170,7 +226,7 @@ class AuthorizationIntegrationTest {
                                 }
                                 """.formatted("b".repeat(256), "a".repeat(256))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         mvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -184,7 +240,7 @@ class AuthorizationIntegrationTest {
                                 }
                                 """.formatted("n".repeat(256))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
     }
 
     @Test
@@ -204,7 +260,7 @@ class AuthorizationIntegrationTest {
                                 }
                                 """.formatted("d".repeat(1201))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         for (var oversizedField : new String[] {"name", "imageUrl", "location"}) {
             var body = """
@@ -223,7 +279,7 @@ class AuthorizationIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("Validacao"));
+                    .andExpect(jsonPath("$.error").value("Validação"));
         }
 
         mvc.perform(post("/api/courts")
@@ -239,7 +295,7 @@ class AuthorizationIntegrationTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         mvc.perform(post("/api/courts")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -254,7 +310,7 @@ class AuthorizationIntegrationTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validacao"));
+                .andExpect(jsonPath("$.error").value("Validação"));
 
         mvc.perform(post("/api/courts")
                         .contentType(MediaType.APPLICATION_JSON)

@@ -13,6 +13,15 @@ vi.mock('../contexts/AppDataContext', () => ({
   useAppData: () => appDataMock.current
 }));
 
+const futureIso = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 describe('verificação de disponibilidade no formulário de reserva', () => {
   beforeEach(() => {
     appDataMock.ensureAvailabilityRange.mockReset();
@@ -26,6 +35,8 @@ describe('verificação de disponibilidade no formulário de reserva', () => {
   });
 
   it('não anuncia nem permite reservar uma data até a API verificá-la', async () => {
+    const firstDate = futureIso(10);
+    const secondDate = futureIso(11);
     let resolveFirst!: () => void;
     let rejectSecond!: (reason: Error) => void;
     appDataMock.ensureAvailabilityRange
@@ -33,9 +44,9 @@ describe('verificação de disponibilidade no formulário de reserva', () => {
       .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectSecond = reject; }));
 
     const actor = initialState.users.find((user) => user.role === 'CLIENTE')!;
-    render(<ReservationForm actor={actor} initialValues={{ date: '2099-01-10' }} onCreated={vi.fn()} />);
+    render(<ReservationForm actor={actor} initialValues={{ date: firstDate }} onCreated={vi.fn()} />);
 
-    await waitFor(() => expect(appDataMock.ensureAvailabilityRange).toHaveBeenCalledWith('2099-01-10', '2099-01-10'));
+    await waitFor(() => expect(appDataMock.ensureAvailabilityRange).toHaveBeenCalledWith(firstDate, firstDate));
     expect(screen.getByRole('status')).toHaveTextContent('Consultando a disponibilidade');
     expect(screen.queryByText(/Horário disponível/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Verificando horário/i })).toBeDisabled();
@@ -44,8 +55,8 @@ describe('verificação de disponibilidade no formulário de reserva', () => {
     await waitFor(() => expect(screen.getByText(/Horário disponível/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Criar reserva' })).toBeEnabled();
 
-    fireEvent.change(screen.getByLabelText('Data da reserva'), { target: { value: '2099-01-11' } });
-    await waitFor(() => expect(appDataMock.ensureAvailabilityRange).toHaveBeenCalledWith('2099-01-11', '2099-01-11'));
+    fireEvent.change(screen.getByLabelText('Data da reserva'), { target: { value: secondDate } });
+    await waitFor(() => expect(appDataMock.ensureAvailabilityRange).toHaveBeenCalledWith(secondDate, secondDate));
     expect(screen.queryByText(/Horário disponível/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Verificando horário/i })).toBeDisabled();
 
@@ -62,7 +73,7 @@ describe('verificação de disponibilidade no formulário de reserva', () => {
     };
     const actor = initialState.users.find((user) => user.role === 'CLIENTE')!;
 
-    render(<ReservationForm actor={actor} initialValues={{ date: '2099-01-10' }} onCreated={vi.fn()} />);
+    render(<ReservationForm actor={actor} initialValues={{ date: futureIso(10) }} onCreated={vi.fn()} />);
 
     expect(screen.getByText(/Horário disponível/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Criar reserva' })).toBeEnabled();

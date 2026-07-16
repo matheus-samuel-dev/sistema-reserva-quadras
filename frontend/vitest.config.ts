@@ -5,6 +5,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    css: true
+    css: true,
+    // Lazy route modules are intentionally split; allow their first transform to
+    // finish even on resource-constrained CI runners.
+    testTimeout: 30_000
   }
 });

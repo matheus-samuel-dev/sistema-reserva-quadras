@@ -34,7 +34,7 @@ public class NotificationController {
     @PutMapping("/{id}/read")
     Notification markRead(@PathVariable Long id) {
         var notification = notifications.findByIdAndUserId(id, currentUser.user().getId())
-                .orElseThrow(() -> new NotFoundException("Notificacao nao encontrada."));
+                .orElseThrow(() -> new NotFoundException("Notificação não encontrada."));
         notification.setRead(true);
         return notifications.save(notification);
     }

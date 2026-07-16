@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.Set;
 
 public record UserRequest(
         @NotBlank @Size(max = 255) String name,
@@ -16,6 +17,9 @@ public record UserRequest(
         @Size(max = 255) String bio,
         Modality favoriteModality,
         @Size(max = 40) String sportsLevel,
-        @Size(max = 255) String avatarUrl
+        @Size(max = 255) String avatarUrl,
+        @Size(max = 30) String phone,
+        @Size(max = 12) Set<@NotBlank @Size(max = 40) String> practicedSports,
+        @Size(max = 1000) String availability
 ) {
 }

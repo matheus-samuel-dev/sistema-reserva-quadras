@@ -29,10 +29,11 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { CourtImage } from '../../components/CourtImage';
+import { CourtImage, getSafeCourtImageSource } from '../../components/CourtImage';
 import { EmptyState } from '../../components/EmptyState';
 import { IconField } from '../../components/IconField';
 import { Modal } from '../../components/Modal';
@@ -48,13 +49,25 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSystemStatus, tokenFromStorage } from '../../lib/api';
 import { reservationStatusOrder } from '../../lib/status';
-import type { Court, CourtStatus, Modality, Payment, Reservation, ReservationFormInput, ReservationStatus, Role, User } from '../../lib/types';
+import type { Court, CourtStatus, Modality, Payment, PaymentStatus, Reservation, ReservationFormInput, ReservationStatus, Role, User } from '../../lib/types';
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
 const courtStatuses: CourtStatus[] = ['Disponível', 'Em manutenção', 'Indisponível'];
 const reservationStatuses: ReservationStatus[] = [...reservationStatusOrder];
+const reservationTransitions: Record<ReservationStatus, ReservationStatus[]> = {
+  Pendente: ['Confirmada'],
+  Confirmada: ['Em andamento', 'Concluída'],
+  'Em andamento': ['Concluída'],
+  Cancelada: ['Pendente'],
+  Concluída: []
+};
 const chartTooltip = { background: 'var(--tooltip-bg)', color: 'var(--tooltip-text)', border: '1px solid var(--border-strong)', borderRadius: 10, boxShadow: 'var(--shadow-panel)' };
+const sentenceCase = (value: string) => {
+  const normalized = value.trim();
+  return normalized ? normalized[0].toLocaleUpperCase('pt-BR') + normalized.slice(1) : '';
+};
+const humanizeCategory = (value: string) => sentenceCase(value.replace(/_/g, ' ').toLocaleLowerCase('pt-BR'));
 
 const todayIso = () => {
   const date = new Date();
@@ -103,6 +116,18 @@ function SectionTitle({ title, action }: { title: string; action?: ReactNode }) 
   );
 }
 
+function ChartEmptyState({ description }: { description: string }) {
+  return (
+    <div className="grid min-h-44 place-items-center rounded-lg border border-dashed border-line bg-[var(--surface-1)] p-5 text-center">
+      <div>
+        <BarChart3 className="mx-auto h-7 w-7 text-muted" aria-hidden="true" />
+        <p className="mt-3 font-bold">Sem dados no período</p>
+        <p className="mt-1 max-w-xs text-xs leading-5 text-muted">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 function ReservationDetails({ reservation }: { reservation: Reservation }) {
   const { state } = useAppData();
   const client = state.users.find((item) => item.id === reservation.clientId);
@@ -111,7 +136,7 @@ function ReservationDetails({ reservation }: { reservation: Reservation }) {
   return (
     <div className="grid gap-4">
       <div className="grid overflow-hidden rounded-lg border border-line sm:grid-cols-[.8fr_1.2fr]">
-        <CourtImage courtId={reservation.courtId} courtName={reservation.courtName} modality={reservation.modality} className="h-full min-h-40 border-b border-line sm:border-b-0 sm:border-r" />
+        <CourtImage courtId={reservation.courtId} courtName={reservation.courtName} modality={reservation.modality} image={court?.image} className="h-full min-h-40 border-b border-line sm:border-b-0 sm:border-r" />
         <div className="flex flex-col justify-between p-4">
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-neon">{reservation.modality}</p><h3 className="mt-1 text-2xl font-black">{reservation.code}</h3><p className="mt-1 text-sm text-muted">{reservation.courtName}</p></div><StatusBadge status={reservation.status} /></div>
           <div className="mt-5 flex items-center gap-3"><Avatar name={reservation.clientName} src={client?.profile.photo} size={42} /><div><p className="font-bold">{reservation.clientName}</p><p className="text-xs text-muted">{client?.email ?? 'Cliente PlaySpace'}</p></div></div>
@@ -167,7 +192,7 @@ export function AdminDashboard() {
     const byStatus = reservationStatuses.map((status) => ({ name: status, value: state.reservations.filter((item) => item.status === status).length }));
     const byModality = modalities.map((modality) => ({ name: modality, reservas: state.reservations.filter((item) => item.modality === modality).length }));
     const daily = weekDays.map((day) => ({
-      day: new Date(`${day}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }),
+      day: sentenceCase(new Date(`${day}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' })),
       reservas: weekReservations.filter((item) => item.date === day).length,
       receita: weekReservations.filter((item) => item.date === day).reduce((sum, item) => sum + item.totalValue, 0)
     }));
@@ -181,13 +206,17 @@ export function AdminDashboard() {
       .map((court) => ({ court, count: state.reservations.filter((item) => item.courtId === court.id).length }))
       .sort((a, b) => b.count - a.count)[0]?.court.name ?? '-';
 
-    return { todayReservations, weekReservations, upcoming, revenue, occupancy, cancellations, byStatus, byModality, daily, peakHours, mostBookedCourt };
+    const visibleModalities = byModality.filter((item) => item.reservas > 0);
+    const maxDailyReservations = Math.max(1, ...daily.map((item) => item.reservas));
+    const maxDailyRevenue = Math.max(100, ...daily.map((item) => item.receita));
+
+    return { todayReservations, weekReservations, upcoming, revenue, occupancy, cancellations, byStatus, byModality, visibleModalities, daily, peakHours, mostBookedCourt, maxDailyReservations, maxDailyRevenue };
   }, [state.courts, state.payments, state.reservations]);
 
   const executives: Array<[string, string, LucideIcon, 'neon' | 'cyan' | 'amber' | 'danger']> = [
     ['Quadra mais reservada', data.mostBookedCourt, Volleyball, 'neon'],
     ['Horário de maior movimento', data.peakHours[0]?.hour ?? '-', Clock3, 'cyan'],
-    ['Modalidade em alta', data.byModality.sort((a, b) => b.reservas - a.reservas)[0]?.name ?? '-', Flame, 'amber'],
+    ['Modalidade em alta', [...data.byModality].sort((a, b) => b.reservas - a.reservas)[0]?.name ?? '-', Flame, 'amber'],
     ['Jogadores ativos', String(state.users.filter((user) => user.role === 'CLIENTE' && user.active).length), Users, 'neon']
   ];
 
@@ -207,7 +236,7 @@ export function AdminDashboard() {
         {executives.map(([title, value, Icon, tone]) => <StatCard key={title} title={title} value={value} icon={Icon} tone={tone} />)}
       </div>
 
-      <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+      <div className="mt-4 grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <section className="glass-panel min-w-0 rounded-lg p-5">
           <SectionTitle title="Próximas reservas" action={<StatusBadge status="Confirmada" compact />} />
           <div className="grid gap-3">
@@ -216,7 +245,7 @@ export function AdminDashboard() {
                 <Avatar name={reservation.clientName} src={state.users.find((item) => item.id === reservation.clientId)?.profile.photo} size={40} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold">{reservation.courtName}</p>
-                  <p className="truncate text-sm text-muted">{reservation.clientName} · {reservation.date} · {reservation.startTime}</p>
+                  <p className="truncate text-sm text-muted">{reservation.clientName} · {new Date(`${reservation.date}T12:00:00`).toLocaleDateString('pt-BR')} · {reservation.startTime}</p>
                 </div>
                 <span className="shrink-0"><StatusBadge status={reservation.status} compact /></span>
               </div>
@@ -226,64 +255,72 @@ export function AdminDashboard() {
         </section>
         <section className="glass-panel min-w-0 overflow-hidden rounded-lg p-5">
           <SectionTitle title="Reservas e receita da semana" action={<strong className="text-neon">{data.occupancy}% ocupação</strong>} />
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.daily}>
-                <CartesianGrid stroke="var(--line)" />
-                <XAxis dataKey="day" stroke="var(--muted)" />
-                <YAxis yAxisId="reservas" stroke="var(--primary)" allowDecimals={false} />
-                <YAxis yAxisId="receita" orientation="right" stroke="var(--info)" tickFormatter={(value) => `R$ ${value}`} />
-                <RechartsTooltip contentStyle={chartTooltip} formatter={(value, name) => name === 'receita' ? [currency(Number(value)), 'Receita'] : [value, 'Reservas']} />
-                <Legend formatter={(value) => value === 'receita' ? 'Receita (R$)' : 'Reservas'} />
-                <Line yAxisId="reservas" type="monotone" dataKey="reservas" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4 }} />
-                <Line yAxisId="receita" type="monotone" dataKey="receita" stroke="var(--info)" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {data.weekReservations.length === 0
+            ? <ChartEmptyState description="As reservas confirmadas desta semana aparecerão aqui com a receita correspondente." />
+            : <div className="h-[250px] min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.daily} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid stroke="var(--line)" vertical={false} />
+                    <XAxis dataKey="day" stroke="var(--muted)" tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="reservas" stroke="var(--primary)" allowDecimals={false} domain={[0, Math.ceil(data.maxDailyReservations * 1.2)]} width={28} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="receita" orientation="right" stroke="var(--info)" domain={[0, Math.ceil(data.maxDailyRevenue * 1.15)]} width={58} tickFormatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR', { notation: 'compact' })}`} tickLine={false} axisLine={false} />
+                    <RechartsTooltip contentStyle={chartTooltip} labelFormatter={(label) => `Dia: ${label}`} formatter={(value, name) => name === 'receita' ? [currency(Number(value)), 'Receita'] : [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Reservas']} />
+                    <Legend verticalAlign="top" align="right" height={36} formatter={(value) => value === 'receita' ? 'Receita (R$)' : 'Reservas'} />
+                    <Line yAxisId="reservas" type="monotone" dataKey="reservas" stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    <Line yAxisId="receita" type="monotone" dataKey="receita" stroke="var(--info)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>}
         </section>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-3">
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Reservas por status" />
           <ReservationStatusDonut data={data.byStatus} />
         </section>
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Reservas por modalidade" />
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.byModality}>
-                <XAxis dataKey="name" hide />
-                <YAxis stroke="var(--muted)" allowDecimals={false} />
-                <RechartsTooltip contentStyle={chartTooltip} />
-                <Bar dataKey="reservas" fill="var(--info)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {data.visibleModalities.length === 0
+            ? <ChartEmptyState description="O comparativo será exibido após a primeira reserva do período." />
+            : <div style={{ height: Math.min(248, Math.max(180, data.visibleModalities.length * 42)) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.visibleModalities} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }} barCategoryGap="28%">
+                    <CartesianGrid stroke="var(--line)" horizontal={false} />
+                    <XAxis type="number" stroke="var(--muted)" allowDecimals={false} domain={[0, 'dataMax + 1']} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="name" stroke="var(--muted)" width={86} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <RechartsTooltip contentStyle={chartTooltip} formatter={(value) => [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Total']} cursor={{ fill: 'var(--surface-hover)' }} />
+                    <Bar dataKey="reservas" fill="var(--info)" radius={[0, 6, 6, 0]} maxBarSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>}
         </section>
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Horários mais utilizados" />
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.peakHours}>
-                <XAxis dataKey="hour" stroke="var(--muted)" />
-                <YAxis stroke="var(--muted)" allowDecimals={false} />
-                <RechartsTooltip contentStyle={chartTooltip} />
-                <Bar dataKey="reservas" fill="var(--primary)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {data.peakHours.length === 0
+            ? <ChartEmptyState description="Os horários de maior procura serão calculados automaticamente." />
+            : <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.peakHours} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barCategoryGap="32%">
+                    <CartesianGrid stroke="var(--line)" vertical={false} />
+                    <XAxis dataKey="hour" stroke="var(--muted)" tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--muted)" allowDecimals={false} domain={[0, 'dataMax + 1']} width={28} tickLine={false} axisLine={false} />
+                    <RechartsTooltip contentStyle={chartTooltip} labelFormatter={(label) => `Horário: ${label}`} formatter={(value) => [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Total']} cursor={{ fill: 'var(--surface-hover)' }} />
+                    <Bar dataKey="reservas" fill="var(--primary)" radius={[6, 6, 0, 0]} maxBarSize={38} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>}
         </section>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-2">
         <section className="glass-panel rounded-lg p-5">
           <SectionTitle title="Atividade recente" />
           <div className="grid gap-3">
             {state.activities.slice(0, 6).map((activity) => (
               <div key={activity.id} className="app-card p-3">
-                <p className="font-semibold">{activity.action}</p>
-                <p className="text-xs text-muted">{activity.actor} · {activity.category}</p>
+                <p className="font-semibold">{sentenceCase(activity.action)}</p>
+                <p className="text-xs text-muted">{activity.actor} · {humanizeCategory(activity.category)} · {new Date(activity.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
               </div>
             ))}
             {state.activities.length === 0 && <EmptyState title="Nenhuma atividade registrada" description="O histórico aparecerá aqui assim que a API registrar uma ação operacional." />}
@@ -351,7 +388,7 @@ export function AdminAgendaPage() {
 }
 
 export function AdminCourtsPage() {
-  const { state, saveCourt, removeCourt } = useAppData();
+  const { state, dataSource, saveCourt, removeCourt } = useAppData();
   const [editing, setEditing] = useState<Court | null>(null);
   const [removing, setRemoving] = useState<Court | null>(null);
   const [toast, setToast] = useState('');
@@ -368,7 +405,7 @@ export function AdminCourtsPage() {
     location: '',
     lighting: true,
     covered: false,
-    rating: 4.8
+    rating: 0
   };
 
   return (
@@ -377,7 +414,7 @@ export function AdminCourtsPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {state.courts.map((court) => (
           <article key={court.id} className="glass-panel card-hover overflow-hidden rounded-lg">
-            <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} className="aspect-[16/8] border-b border-line" />
+            <CourtImage courtId={court.id} courtName={court.name} modality={court.modality} image={court.image} className="aspect-[16/8] border-b border-line" />
             <div className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -400,7 +437,7 @@ export function AdminCourtsPage() {
           </article>
         ))}
       </div>
-      <CourtModal key={editing?.id || (editing ? 'new' : 'closed')} court={editing} onClose={() => setEditing(null)} onSave={async (court) => {
+      <CourtModal key={editing?.id || (editing ? 'new' : 'closed')} court={editing} allowUpload={dataSource === 'demo'} onClose={() => setEditing(null)} onSave={async (court) => {
         try { await saveCourt(court); setEditing(null); setToastTone('success'); setToast('Quadra salva com sucesso.'); }
         catch (error) { setToastTone('danger'); setToast(error instanceof Error ? error.message : 'Não foi possível salvar a quadra.'); }
       }} />
@@ -414,15 +451,39 @@ export function AdminCourtsPage() {
   );
 }
 
-function CourtModal({ court, onClose, onSave }: { court: Court | null; onClose: () => void; onSave: (court: Court) => void | Promise<void> }) {
-  const [draft, setDraft] = useState(court);
+function CourtModal({ court, allowUpload, onClose, onSave }: { court: Court | null; allowUpload: boolean; onClose: () => void; onSave: (court: Court) => void | Promise<void> }) {
+  const [draft, setDraft] = useState<Court | null>(() => court ? { ...court, image: getSafeCourtImageSource(court.image) ? court.image : '' } : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   if (!court || !draft) return null;
   const update = (key: keyof Court, value: string | number | boolean) => setDraft((current) => current ? { ...current, [key]: value } : current);
+  const imageIsDataUri = draft.image.startsWith('data:image/');
+  const handleImageUpload = (file?: File) => {
+    setError('');
+    if (!file) return;
+    if (!allowUpload) {
+      setError('O upload local de imagem está disponível apenas no modo demonstração. Use uma URL pública.');
+      return;
+    }
+    if (!['image/avif', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Use uma imagem AVIF, JPEG, PNG ou WebP.');
+      return;
+    }
+    if (file.size > 1_500_000) {
+      setError('A imagem deve ter no máximo 1,5 MB para não comprometer o armazenamento local.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && getSafeCourtImageSource(reader.result)) update('image', reader.result);
+      else setError('Não foi possível validar a imagem selecionada.');
+    };
+    reader.onerror = () => setError('Não foi possível ler a imagem selecionada.');
+    reader.readAsDataURL(file);
+  };
   return (
     <Modal title={court.id ? 'Editar quadra' : 'Nova quadra'} open={Boolean(court)} onClose={onClose}>
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(''); try { await onSave(draft); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.'); } finally { setSaving(false); } }}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); setError(''); if (draft.image && !getSafeCourtImageSource(draft.image)) { setError('Informe uma URL de imagem HTTP ou HTTPS válida.'); return; } setSaving(true); try { await onSave(draft); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.'); } finally { setSaving(false); } }}>
         <label className="grid gap-2 text-sm font-semibold">Nome<input className="form-control" value={draft.name} onChange={(event) => update('name', event.target.value)} required /></label>
         <label className="grid gap-2 text-sm font-semibold">Modalidade<select className="form-control" value={draft.modality} onChange={(event) => update('modality', event.target.value)}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
         <label className="grid gap-2 text-sm font-semibold">Preço/h<input className="form-control" type="number" min={1} value={draft.pricePerHour} onChange={(event) => update('pricePerHour', Number(event.target.value))} /></label>
@@ -432,6 +493,25 @@ function CourtModal({ court, onClose, onSave }: { court: Court | null; onClose: 
         <label className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm font-semibold"><input type="checkbox" checked={draft.lighting} onChange={(event) => update('lighting', event.target.checked)} />Iluminação</label>
         <label className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm font-semibold"><input type="checkbox" checked={draft.covered} onChange={(event) => update('covered', event.target.checked)} />Coberta</label>
         <label className="grid gap-2 text-sm font-semibold md:col-span-2">Descrição<textarea className="form-control min-h-24" value={draft.description} onChange={(event) => update('description', event.target.value)} /></label>
+        <div className="grid gap-3 rounded-lg border border-line p-3 md:col-span-2 md:grid-cols-[minmax(0,1fr)_11rem] md:items-start">
+          <div className="grid min-w-0 gap-3">
+            <label className="grid gap-2 text-sm font-semibold">
+              URL da imagem
+              <input className="form-control min-w-0" type="url" inputMode="url" placeholder={imageIsDataUri ? 'Imagem enviada do dispositivo' : 'https://exemplo.com/quadra.webp'} value={imageIsDataUri ? '' : draft.image} onChange={(event) => { setError(''); update('image', event.target.value); }} />
+            </label>
+            {allowUpload && <label className="grid gap-2 text-sm font-semibold">
+              Upload no modo demo
+              <input className="form-control min-w-0 text-xs" type="file" accept="image/avif,image/jpeg,image/png,image/webp" onChange={(event) => handleImageUpload(event.target.files?.[0])} />
+              <span className="text-xs font-normal leading-5 text-muted">AVIF, JPEG, PNG ou WebP, com até 1,5 MB. A imagem fica armazenada apenas neste navegador.</span>
+            </label>}
+            {!allowUpload && <p className="text-xs leading-5 text-muted">No modo conectado, informe uma URL pública HTTP ou HTTPS. O upload local fica restrito à demonstração.</p>}
+            {draft.image && <button className="ghost-button w-fit rounded-lg px-3 py-2 text-xs font-bold" type="button" onClick={() => { update('image', ''); setError(''); }}>Remover imagem</button>}
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Pré-visualização</p>
+            <CourtImage courtId={draft.id || 'new-court-preview'} courtName={draft.name || 'Nova quadra'} modality={draft.modality} image={draft.image} className="aspect-[4/3] rounded-lg border border-line" />
+          </div>
+        </div>
         {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)] md:col-span-2" role="alert">{error}</p>}
         <button className="neon-button rounded-lg px-5 py-3 font-black disabled:opacity-60 md:col-span-2" disabled={saving}>{saving ? 'Salvando quadra...' : 'Salvar quadra'}</button>
       </form>
@@ -440,7 +520,7 @@ function CourtModal({ court, onClose, onSave }: { court: Court | null; onClose: 
 }
 
 export function AdminReservationsPage() {
-  const { state, cancelReservation } = useAppData();
+  const { state, cancelReservation, changeReservationStatus } = useAppData();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<ReservationStatus | 'Todos'>('Todos');
@@ -452,6 +532,18 @@ export function AdminReservationsPage() {
   const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
+  const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const reservationId = searchParams.get('reserva');
+    if (!reservationId) return;
+    const reservation = state.reservations.find((item) => item.id === reservationId);
+    if (reservation) setSelected(reservation);
+    const next = new URLSearchParams(searchParams);
+    next.delete('reserva');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, state.reservations]);
 
   const filtered = useMemo(
     () =>
@@ -467,6 +559,20 @@ export function AdminReservationsPage() {
   const visible = filtered.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize);
 
   const requestCancel = (reservation: Reservation) => setCanceling(reservation);
+  const updateStatus = async (reservation: Reservation, nextStatus: ReservationStatus) => {
+    if (!user || nextStatus === reservation.status) return;
+    setStatusUpdating(reservation.id);
+    try {
+      await changeReservationStatus(reservation.id, nextStatus, user);
+      setToastTone('success');
+      setToast(`Reserva ${reservation.code} atualizada para ${nextStatus}.`);
+    } catch (reason) {
+      setToastTone('danger');
+      setToast(reason instanceof Error ? reason.message : 'Não foi possível atualizar o status.');
+    } finally {
+      setStatusUpdating(null);
+    }
+  };
   const confirmCancel = async () => {
     if (!canceling || !user) return;
     try {
@@ -514,7 +620,8 @@ export function AdminReservationsPage() {
                   <td>{currency(reservation.totalValue)}</td>
                   <td><StatusBadge status={reservation.status} compact /></td>
                   <td>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      {reservationTransitions[reservation.status].length > 0 && <select className="form-control min-w-36 py-2 text-xs" value="" disabled={statusUpdating === reservation.id} onChange={(event) => { if (event.target.value) void updateStatus(reservation, event.target.value as ReservationStatus); }} aria-label={`Alterar status de ${reservation.code}`}><option value="">Alterar status</option>{reservationTransitions[reservation.status].map((item) => <option key={item} value={item}>{item}</option>)}</select>}
                       <UiTooltip content="Visualizar"><button className="ghost-button rounded-lg p-2" onClick={() => setSelected(reservation)} aria-label="Visualizar reserva"><Eye className="h-4 w-4" /></button></UiTooltip>
                       <UiTooltip content={reservation.status === 'Pendente' ? 'Registrar pagamento' : 'Pagamento indisponível neste status'}><button className="ghost-button rounded-lg p-2" onClick={() => setPaying(reservation)} aria-label="Registrar pagamento" disabled={reservation.status !== 'Pendente'}><CreditCard className="h-4 w-4" /></button></UiTooltip>
                       <UiTooltip content="Cancelar"><button className="ghost-button rounded-lg p-2" onClick={() => requestCancel(reservation)} aria-label="Cancelar reserva" disabled={['Cancelada', 'Concluída'].includes(reservation.status)}><XCircle className="h-4 w-4" /></button></UiTooltip>
@@ -547,24 +654,59 @@ export function AdminReservationsPage() {
 }
 
 export function AdminPaymentsPage() {
-  const { state } = useAppData();
+  const { state, refundPayment } = useAppData();
+  const { user } = useAuth();
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'Todos'>('Todos');
   const [selected, setSelected] = useState<Payment | null>(null);
-  const filtered = state.payments.filter((payment) => `${payment.reservationCode} ${payment.method} ${payment.transactionCode}`.toLowerCase().includes(query.toLowerCase()));
+  const [refunding, setRefunding] = useState<Payment | null>(null);
+  const [page, setPage] = useState(1);
+  const [toast, setToast] = useState('');
+  const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageSize = 8;
+  const filtered = state.payments.filter((payment) => `${payment.reservationCode} ${payment.method} ${payment.transactionCode}`.toLowerCase().includes(query.toLowerCase()) && (statusFilter === 'Todos' || payment.status === statusFilter));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visible = filtered.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize);
   const approved = state.payments.filter((payment) => payment.status === 'Aprovado');
   const revenue = approved.reduce((sum, payment) => sum + payment.amount, 0);
   const averageTicket = approved.length ? revenue / approved.length : 0;
+  useEffect(() => {
+    const paymentId = searchParams.get('pagamento');
+    if (!paymentId) return;
+    const payment = state.payments.find((item) => item.id === paymentId);
+    if (payment) setSelected(payment);
+    const next = new URLSearchParams(searchParams);
+    next.delete('pagamento');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, state.payments]);
+  const confirmRefund = async () => {
+    if (!refunding || !user) return;
+    try {
+      await refundPayment(refunding.id, user);
+      setToastTone('success');
+      setToast(`Pagamento ${refunding.transactionCode} estornado com sucesso.`);
+    } catch (reason) {
+      setToastTone('danger');
+      setToast(reason instanceof Error ? reason.message : 'Não foi possível estornar o pagamento.');
+    } finally {
+      setRefunding(null);
+    }
+  };
   return (
     <>
-      <PageHeader title="Pagamentos" subtitle="Controle de PIX, crédito, débito e status de transações demo." />
+      <PageHeader title="Pagamentos" subtitle="Controle de PIX, cartões, comprovantes e estornos demonstrativos com trilha de auditoria." />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <StatCard title="Receita aprovada" value={currency(revenue)} hint="Pagamentos demonstrativos" icon={Banknote} tone="neon" />
         <StatCard title="Ticket médio" value={currency(averageTicket)} hint="Média dos aprovados" icon={TrendingUp} tone="cyan" />
         {(['Aprovado', 'Pendente', 'Recusado', 'Cancelado'] as const).map((status) => <StatCard key={status} title={status} value={state.payments.filter((payment) => payment.status === status).length} icon={CreditCard} tone={status === 'Aprovado' ? 'neon' : status === 'Pendente' ? 'amber' : 'danger'} />)}
       </div>
-      <IconField wrapperClassName="my-4" label="Buscar pagamentos" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Reserva, método ou transação" />
+      <div className="my-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <IconField label="Buscar pagamentos" leadingIcon={<Search className="h-4 w-4" />} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Reserva, método ou transação" />
+        <label className="grid gap-2 text-sm font-semibold">Status<select className="form-control min-w-44" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as PaymentStatus | 'Todos'); setPage(1); }}><option>Todos</option><option>Pendente</option><option>Aprovado</option><option>Recusado</option><option>Cancelado</option></select></label>
+      </div>
       <div className="grid gap-3">
-        {filtered.slice(0, 16).map((payment) => (
+        {visible.map((payment) => (
           <div key={payment.id} className="glass-panel card-hover flex flex-wrap items-center justify-between gap-3 rounded-lg p-4">
             <div>
               <p className="font-black">{payment.reservationCode}</p>
@@ -573,15 +715,18 @@ export function AdminPaymentsPage() {
             <div className="text-right">
               <p className="font-black">{currency(payment.amount)}</p>
               <StatusBadge status={payment.status} compact />
-              <button className="ghost-button mt-2 min-h-10 rounded-lg px-3 py-2 text-xs font-bold text-neon" onClick={() => setSelected(payment)}>Ver detalhes</button>
+              <div className="mt-2 flex flex-wrap justify-end gap-2"><button className="ghost-button min-h-10 rounded-lg px-3 py-2 text-xs font-bold text-neon" onClick={() => setSelected(payment)}>Ver detalhes</button>{payment.status === 'Aprovado' && <button className="ghost-button inline-flex min-h-10 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold text-[var(--danger)]" onClick={() => setRefunding(payment)}><RefreshCw className="h-3.5 w-3.5" />Estornar</button>}</div>
             </div>
           </div>
         ))}
         {filtered.length === 0 && <EmptyState title="Nenhum pagamento encontrado" description="A busca não retornou transações para os filtros atuais." />}
+        {filtered.length > pageSize && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3 text-sm"><span className="text-muted">Página {Math.min(page, totalPages)} de {totalPages}</span><div className="flex gap-2"><button className="ghost-button min-h-10 rounded-lg px-3 py-2 font-bold" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button><button className="ghost-button min-h-10 rounded-lg px-3 py-2 font-bold" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Próxima</button></div></div>}
       </div>
       <Modal title="Detalhes do pagamento" open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="max-w-lg">
-        {selected && <div className="grid gap-3"><div className="soft-panel rounded-lg p-4"><p className="text-xs text-muted">Transação</p><p className="break-all text-xl font-black">{selected.transactionCode}</p></div>{[['Reserva', selected.reservationCode], ['Método', selected.method], ['Valor', currency(selected.amount)], ['Data', selected.paidAt ? new Date(selected.paidAt).toLocaleString('pt-BR') : 'Aguardando confirmação']].map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 text-sm"><span className="text-muted">{label}</span><strong className="text-right">{value}</strong></div>)}<div className="flex items-center justify-between rounded-lg border border-line p-3"><span className="text-sm text-muted">Status</span><StatusBadge status={selected.status} /></div><p className="rounded-lg border border-cyan/25 bg-cyan/10 p-3 text-xs text-cyan">Comprovante demonstrativo: esta transação não representa movimentação financeira real.</p></div>}
+        {selected && <div className="grid gap-3"><div className="soft-panel rounded-lg p-4"><p className="text-xs text-muted">Transação</p><p className="break-all text-xl font-black">{selected.transactionCode}</p></div>{[['Reserva', selected.reservationCode], ['Método', selected.method], ['Valor', currency(selected.amount)], ['Pago em', selected.paidAt ? new Date(selected.paidAt).toLocaleString('pt-BR') : 'Aguardando confirmação'], ...(selected.refundedAt ? [['Estornado em', new Date(selected.refundedAt).toLocaleString('pt-BR')]] : [])].map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 text-sm"><span className="text-muted">{label}</span><strong className="text-right">{value}</strong></div>)}<div className="flex items-center justify-between rounded-lg border border-line p-3"><span className="text-sm text-muted">Status</span><StatusBadge status={selected.status} /></div><p className="rounded-lg border border-cyan/25 bg-cyan/10 p-3 text-xs text-cyan">Comprovante demonstrativo: esta transação não representa movimentação financeira real.</p>{selected.status === 'Aprovado' && <button className="ghost-button inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 font-bold text-[var(--danger)]" onClick={() => { setRefunding(selected); setSelected(null); }}><RefreshCw className="h-4 w-4" />Estornar pagamento</button>}</div>}
       </Modal>
+      <ConfirmDialog open={Boolean(refunding)} title="Estornar pagamento" description={`Confirme o estorno demonstrativo de ${currency(refunding?.amount ?? 0)} da transação ${refunding?.transactionCode ?? ''}. A reserva vinculada será cancelada se ainda não estiver concluída.`} confirmLabel="Confirmar estorno" onClose={() => setRefunding(null)} onConfirm={confirmRefund} />
+      <Toast message={toast} tone={toastTone} onClose={() => setToast('')} />
     </>
   );
 }
@@ -676,6 +821,7 @@ export function AdminReportsPage() {
 export function AdminUsersPage() {
   const { state, saveUser, toggleUserActive } = useAppData();
   const [editing, setEditing] = useState<User | null>(null);
+  const [viewing, setViewing] = useState<User | null>(null);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'Todos'>('Todos');
   const [activeFilter, setActiveFilter] = useState<'Todos' | 'Ativos' | 'Inativos'>('Todos');
@@ -716,6 +862,7 @@ export function AdminUsersPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={item.active ? 'Ativo' : 'Inativo'} compact />
+              <UiTooltip content="Ver detalhes"><button className="ghost-button rounded-lg p-2" onClick={() => setViewing(item)} aria-label={`Ver detalhes de ${item.name}`}><Eye className="h-4 w-4" /></button></UiTooltip>
               <button className="ghost-button rounded-lg px-3 py-2 text-sm" onClick={async () => { try { await toggleUserActive(item.id); setToastTone('success'); setToast(`Usuário ${item.active ? 'inativado' : 'ativado'} com sucesso.`); } catch (error) { setToastTone('danger'); setToast(error instanceof Error ? error.message : 'Não foi possível alterar o usuário.'); } }}>{item.active ? 'Inativar' : 'Ativar'}</button>
               <UiTooltip content="Editar usuário"><button className="ghost-button rounded-lg p-2" onClick={() => setEditing(item)} aria-label="Editar usuário"><Edit3 className="h-4 w-4" /></button></UiTooltip>
             </div>
@@ -723,9 +870,64 @@ export function AdminUsersPage() {
         ))}
       </div>
       {filtered.length === 0 && <EmptyState title="Nenhum usuário encontrado" description="Ajuste sua busca ou crie um novo usuário demo." actionLabel="Novo usuário" onAction={() => setEditing(blank)} />}
+      <UserDetailsModal user={viewing} state={state} onClose={() => setViewing(null)} />
       <UserModal key={editing?.id || (editing ? 'new' : 'closed')} user={editing} onClose={() => setEditing(null)} onSave={async (saved) => { await saveUser(saved); setEditing(null); setToastTone('success'); setToast('Usuário salvo com sucesso.'); }} />
       <Toast message={toast} tone={toastTone} onClose={() => setToast('')} />
     </>
+  );
+}
+
+function UserDetailsModal({ user, state, onClose }: { user: User | null; state: ReturnType<typeof useAppData>['state']; onClose: () => void }) {
+  if (!user) return null;
+  const reservations = state.reservations.filter((item) => item.clientId === user.id);
+  const reservationIds = new Set(reservations.map((item) => item.id));
+  const payments = state.payments.filter((item) => reservationIds.has(item.reservationId));
+  const enrollments = state.championshipEnrollments.filter((item) => item.playerId === user.id);
+  const paidTotal = payments.filter((item) => item.status === 'Aprovado').reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <Modal title="Detalhes do usuário" open={Boolean(user)} onClose={onClose} maxWidth="max-w-3xl">
+      <div className="grid gap-5">
+        <div className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-[var(--surface-2)] p-4">
+          <Avatar name={user.name} src={user.profile.photo} size={64} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-lg font-black">{user.name}</h3><StatusBadge status={user.active ? 'Ativo' : 'Inativo'} compact /></div>
+            <p className="truncate text-sm text-muted">{user.email}</p>
+            <p className="mt-1 text-xs text-muted">{user.role === 'ADMIN' ? 'Administrador' : 'Cliente/Jogador'} · {user.profile.city || 'Cidade não informada'}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ['Reservas', reservations.length],
+            ['Pagamentos', payments.length],
+            ['Total aprovado', currency(paidTotal)],
+            ['Campeonatos', enrollments.length]
+          ].map(([label, value]) => <div key={label} className="rounded-lg border border-line p-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p><strong className="mt-1 block break-words text-lg">{value}</strong></div>)}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-line p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Perfil esportivo</p><p className="mt-2 font-bold">{user.profile.favoriteModality} · {user.profile.level}</p><p className="mt-1 text-sm text-muted">{user.profile.sports.join(', ') || 'Nenhuma modalidade cadastrada'}</p></div>
+          <div className="rounded-lg border border-line p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Contato e disponibilidade</p><p className="mt-2 font-bold">{user.profile.phone || 'Telefone não informado'}</p><p className="mt-1 text-sm text-muted">{user.profile.availability || 'Disponibilidade não informada'}</p></div>
+        </div>
+
+        <section>
+          <SectionTitle title="Reservas recentes" />
+          <div className="grid gap-2">
+            {reservations.slice(0, 5).map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-sm"><div><strong>{item.code}</strong><p className="text-muted">{item.courtName} · {new Date(`${item.date}T12:00:00`).toLocaleDateString('pt-BR')} · {item.startTime}</p></div><StatusBadge status={item.status} compact /></div>)}
+            {reservations.length === 0 && <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">Este usuário ainda não possui reservas.</p>}
+          </div>
+        </section>
+
+        <section>
+          <SectionTitle title="Pagamentos" />
+          <div className="grid gap-2">
+            {payments.slice(0, 5).map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-sm"><div><strong>{currency(item.amount)}</strong><p className="text-muted">{item.reservationCode} · {item.method}</p></div><StatusBadge status={item.status} compact /></div>)}
+            {payments.length === 0 && <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">Nenhum pagamento vinculado a este usuário.</p>}
+          </div>
+        </section>
+      </div>
+    </Modal>
   );
 }
 

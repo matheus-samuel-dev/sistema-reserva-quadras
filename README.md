@@ -1,196 +1,292 @@
-# PlaySpace — Reservas de Quadras
+# PlaySpace — gestão de arenas e comunidade esportiva
 
-PlaySpace é uma plataforma full-stack de reservas e operação esportiva com dois perfis de acesso, agenda responsiva, pagamentos demonstrativos, comunidade e dashboards. O projeto combina acabamento visual de produto SaaS com regras de negócio protegidas no servidor, integração API-first e um modo demo claramente identificado.
+PlaySpace é uma plataforma full-stack para operação de arenas esportivas e relacionamento entre jogadores. O projeto reúne reservas, agenda, quadras, pagamentos demonstrativos, campeonatos, comunidade, parceiros, avaliações, ranking, notificações e administração em uma experiência responsiva com dois perfis de acesso.
+
+O sistema pode operar conectado à API Spring Boot e ao PostgreSQL ou em modo demonstração local, com os mesmos fluxos principais persistidos no navegador. A interface identifica claramente quando não existe backend conectado e nunca apresenta transações demonstrativas como pagamentos reais.
 
 ![Landing page do PlaySpace em desktop](docs/screenshots/landing-desktop.webp)
 
-## Visão do produto
+## Visão geral
 
-### Operação administrativa
+- 27 rotas autenticadas: 13 administrativas, incluindo o index, e 14 de cliente, incluindo o index.
+- Cadastro público de Cliente/Jogador e gestão administrativa de usuários.
+- Temas claro e escuro persistentes, gráficos adaptáveis e identidade visual esportiva.
+- Agenda diária, semanal e mensal, com filtros, criação por horário e detalhes da reserva.
+- Reservas com conflito transacional, cálculo de valor, estados, histórico, pagamento e cancelamento.
+- Comunidade com publicações, comentários, curtidas, edição, exclusão, paginação e compartilhamento.
+- Campeonatos com CRUD administrativo, seis estados, filtros, participantes e inscrições.
+- Perfil esportivo, disponibilidade semanal e fluxo completo de interesses entre parceiros.
+- Perfil pessoal, preferências, troca de senha, avatar, histórico e resumo do jogador.
+- Configurações operacionais persistentes e aplicadas às reservas e aos pagamentos.
+- Avaliações protegidas por reserva concluída e unicidade por reserva.
+- Ranking real por período e modalidade, com pontos, horas e conquistas.
+- Busca global com debounce, resultados agrupados, teclado e fechamento por clique externo.
+- Backend protegido por JWT, autorização por perfil, validação, transações e tratamento global de erros.
+- Flyway como fonte do schema e dados demo idempotentes nos perfis `demo` e `test`.
+
+## Experiência pública
+
+- Landing page com apresentação do produto, benefícios, métricas demonstrativas, galeria de quadras, comunidade, campeonatos, depoimentos e FAQ.
+- Login com atalhos para os dois perfis demo, exibir/ocultar senha, aviso de Caps Lock, loading e feedback de erro.
+- Cadastro em `/cadastro` com nome, e-mail, telefone opcional, senha, confirmação e aceite dos termos.
+- O cadastro público sempre cria um Cliente/Jogador e respeita a configuração `publicRegistrationEnabled`; nunca concede acesso administrativo.
+- Páginas próprias para 403, 404, 500, offline e manutenção.
+
+## Rotas administrativas
 
 ![Dashboard administrativo em desktop](docs/screenshots/admin-dashboard-desktop.webp)
 
-### Agenda responsiva
+| Rota | Funcionalidades |
+| --- | --- |
+| `/admin` | KPIs, próximas reservas, receita e reservas da semana, modalidades, horários utilizados e atividades recentes normalizadas |
+| `/admin/reservas` | Busca, filtros, paginação, criação, detalhes, timeline, pagamento, transições de status e cancelamento confirmado |
+| `/admin/quadras` | CRUD, imagem por URL ou upload local no demo, status/manutenção, preço, capacidade, modalidade, cobertura e iluminação |
+| `/admin/agenda` | Visões dia/semana/mês, filtros, navegação de período, legenda, criação por slot e detalhes |
+| `/admin/pagamentos` | Busca, filtros, comprovante, status, PIX/cartões demo e estorno administrativo auditado |
+| `/admin/comunidade` | Feed compartilhado, criação, edição, exclusão, curtidas, comentários, moderação e compartilhamento |
+| `/admin/campeonatos` | CRUD, status, datas, modalidade, local/quadra, vagas, regulamento, premiação, participantes e inscrições |
+| `/admin/usuarios` | Busca, filtros, criação, edição, perfil, ativação/inativação, redefinição de senha e detalhes operacionais |
+| `/admin/relatorios` | Indicadores, impressão/PDF e exportações de dados |
+| `/admin/configuracoes` | Empresa, funcionamento, reservas, preços, pagamentos, notificações, aparência e segurança |
+| `/admin/perfil` | Dados pessoais, avatar, modalidades, biografia, disponibilidade, resumo, histórico e troca de senha |
+| `/admin/preferencias` | Tema, notificações, cidade, modalidades, horários, privacidade e idioma |
+| `/admin/status` | Estado técnico da aplicação sem exposição de segredos ou hosts internos |
 
-![Agenda administrativa em tablet](docs/screenshots/admin-agenda-tablet.webp)
+## Rotas do cliente
 
 ![Agenda do cliente em mobile](docs/screenshots/client-agenda-mobile.webp)
 
-## Principais diferenciais
-
-- Interface premium em temas claro e escuro, com identidade esportiva e verde como cor principal.
-- 23 rotas autenticadas: 10 administrativas e 13 para clientes.
-- Agenda semanal no desktop/tablet e visualização diária automática no mobile.
-- Disponibilidade consultada no servidor para cada período visível; slots de outros clientes são enviados sem identidade, preço ou observações, e a reserva fica bloqueada se a verificação falhar.
-- Criação concorrente de reservas protegida por lock pessimista e conflito transacional.
-- Preço, capacidade, janela de funcionamento e transições de status validados pelo backend.
-- Pagamento demo controlado pelo servidor; aprovação confirma a reserva e cancelamento invalida pagamentos vinculados.
-- Sessão race-safe: respostas antigas não sobrescrevem uma conta mais recente.
-- Coleções operacionais da API não são persistidas entre contas; a chave de sessão guarda apenas token/usuário atual, enquanto preferências guardam tema e tour.
-- Comunidade, ranking, conquistas, avaliações, campeonatos, notificações e assistente integrados à API quando disponível.
-- Flyway como fonte do schema, Hibernate em modo <code>validate</code> e índices para os fluxos críticos.
-- Rotas divididas em chunks e imagens WebP locais com carregamento otimizado.
-- Quality gate no GitHub Actions para testes/builds do frontend e backend, validação do Compose e construção das imagens.
-
-## Funcionalidades
-
-### Experiência pública
-
-- Landing page com hero, benefícios, métricas identificadas como demonstração, galeria de seis quadras, comunidade, campeonatos, depoimentos, FAQ em accordion e rodapé.
-- Imagens locais por modalidade, recorte padronizado, <code>object-fit</code>, lazy loading, texto alternativo e fallback.
-- Login em duas colunas com preenchimento demo, exibir/ocultar senha, aviso de Caps Lock, Enter, loading, bloqueio de duplo envio e erro amigável.
-- Páginas próprias para 403, 404, 500, offline e manutenção.
-
-### Administrador
-
-| Rota | Entrega |
+| Rota | Funcionalidades |
 | --- | --- |
-| <code>/admin</code> | KPIs calculados, próximas reservas, gráfico com dois eixos, rosca por status, modalidades, horários e atividade da API sem misturar o seed demo |
-| <code>/admin/reservas</code> | Busca, filtros, paginação, detalhes, histórico, pagamento e cancelamento confirmado |
-| <code>/admin/quadras</code> | Cadastro, edição, imagem, status, preço, capacidade e arquivamento lógico |
-| <code>/admin/agenda</code> | Calendário, filtros por quadra/modalidade, seleção de horário e nova reserva |
-| <code>/admin/pagamentos</code> | Histórico, busca, status, método e transações |
-| <code>/admin/comunidade</code> | Feed, avaliações e campeonatos com dados remotos quando disponíveis |
-| <code>/admin/usuarios</code> | Cadastro, edição, avatar, perfil, senha provisória forte e ativação/inativação |
-| <code>/admin/relatorios</code> | Indicadores derivados, impressão/PDF pelo navegador, exportação XLS compatível e CSV |
-| <code>/admin/configuracoes</code> | Leitura da API e ajustes locais de empresa, horários, regras e preços |
-| <code>/admin/status</code> | Estado técnico sem exposição de hosts ou credenciais |
+| `/app` | Resumo esportivo, próximas reservas, conquistas e visão geral da conta |
+| `/app/reservas` | Próximas partidas, histórico, detalhes, timeline, pagamento, cancelamento e avaliação de reservas concluídas |
+| `/app/nova-reserva` | Fluxo guiado com disponibilidade, capacidade, cálculo automático e pagamento demo |
+| `/app/quadras` | Busca, favoritos, estrutura, avaliação média, disponibilidade e preço |
+| `/app/agenda` | Visões dia/semana/mês, horários por status e detalhes preservando dados de outros jogadores |
+| `/app/pagamentos` | Histórico, filtros, detalhes, impressão e download de comprovante demonstrativo |
+| `/app/perfil` | Perfil pessoal e esportivo, avatar, resumo, histórico e senha |
+| `/app/preferencias` | Tema, notificações, lembretes, cidade, modalidades, horários e privacidade |
+| `/app/estatisticas` | Reservas, horas, gastos, frequência e evolução esportiva |
+| `/app/comunidade` | Publicações, comentários, curtidas e compartilhamento persistentes |
+| `/app/ranking` | Classificação por semana, mês ou ano, modalidade, pontos, horas e conquistas |
+| `/app/parceiros` | Perfil esportivo, múltiplas disponibilidades, busca e interesses enviados/recebidos |
+| `/app/campeonatos` | Filtros, detalhes, regulamento, participantes, inscrição e cancelamento da inscrição |
+| `/app/ai` | Assistente demonstrativo baseado em regras e nos dados internos da conta |
 
-### Cliente
+## Módulos funcionais
 
-| Rota | Entrega |
-| --- | --- |
-| <code>/app</code> | Resumo esportivo, clima identificado como simulado, próximas reservas e conquistas |
-| <code>/app/reservas</code> | Próximas partidas, histórico, detalhes, pagamento e cancelamento |
-| <code>/app/nova-reserva</code> | Fluxo guiado que verifica a data escolhida na API antes de anunciar disponibilidade, com cálculo de valor e pagamento demo |
-| <code>/app/quadras</code> | Busca, favoritos, disponibilidade, estrutura, nota e preço |
-| <code>/app/agenda</code> | Horários ocupados sem expor dados de outros jogadores |
-| <code>/app/pagamentos</code> | Histórico e filtros de transações |
-| <code>/app/perfil</code> | Perfil esportivo, bio, cidade, modalidades, nível e conquistas |
-| <code>/app/estatisticas</code> | Reservas, horas, gastos, frequência e evolução |
-| <code>/app/comunidade</code> | Feed integrado, curtidas remotas e comentários explicitamente demo |
-| <code>/app/ranking</code> | Ranking remoto por horas, reservas e comparecimento |
-| <code>/app/parceiros</code> | Busca e criação local de anúncio claramente marcada como simulação |
-| <code>/app/campeonatos</code> | Informações, chaveamento e inscrição via API |
-| <code>/app/ai</code> | Assistente demonstrativo baseado em regras e dados internos |
+### Dashboard e gráficos
 
-### UX transversal
+- Cards e gráficos usam alturas compactas, domínio mínimo coerente e dimensionamento responsivo.
+- O gráfico “Reservas e receita da semana” mantém quantidade e receita em eixos separados, com tooltip em português e moeda em reais.
+- Barras possuem largura máxima e espaçamento proporcional para poucos registros.
+- Títulos, legendas e rótulos se adaptam ao tema e ao viewport.
+- Estados vazios substituem áreas brancas quando não há dados.
+- As atividades recentes são normalizadas em português brasileiro, com capitalização, datas e valores consistentes.
 
-- Sidebar expansível no desktop e drawer no mobile, com preferência local.
-- Navegação inferior responsiva para as ações mais frequentes.
-- Busca global funcional, agrupada por entidade, com atalho <code>Ctrl + K</code> ou <code>/</code>.
-- Menu de perfil com troca real entre conta administrativa e cliente.
-- Central de notificações com contador, leitura, limpeza, Escape e clique externo.
-- Modal global em portal, centralizado, com foco inicial, trap de foco, Escape, restauração de foco e bloqueio de scroll.
-- Inputs com ícone reutilizáveis, sem sobreposição de placeholder.
-- Tooltips acessíveis, estados vazios, mensagens de erro e confirmações destrutivas.
-- Status semânticos consistentes em cards, tabelas, calendário e gráficos.
+### Reservas, agenda e quadras
+
+- Disponibilidade diária consultada na API sem expor identidade, preço ou observações de reservas de terceiros.
+- Agenda com visões diária, semanal e mensal, navegação de períodos, filtros por quadra/modalidade e legenda por status.
+- Criação de reserva por formulário ou seleção de slot, com código único, capacidade e valor calculado.
+- Horário de funcionamento, dias operacionais, intervalo de slots, duração mínima e antecedência máxima vêm das configurações.
+- Sobreposição protegida no serviço com lock pessimista da quadra e conflito transacional.
+- Quadras possuem preço, capacidade, modalidade, cobertura, iluminação, status, imagem e avaliação média.
+
+### Comunidade
+
+- Listagem paginada e ordenada pelas publicações mais recentes.
+- Criação, edição e exclusão de publicação própria; administrador pode moderar qualquer publicação.
+- Curtir/descurtir idempotente, com contadores atualizados imediatamente.
+- Comentários paginados, validação de conteúdo vazio, criação, edição e exclusão por autoria.
+- Compartilhamento usa Web Share API quando disponível e clipboard com fallback quando não estiver.
+- Autor, avatar, modalidade, data/hora, contadores e feedback de sucesso/erro são exibidos em cada publicação.
+
+### Campeonatos
+
+- Campos de nome, descrição, modalidade, cidade, local, quadra, datas, prazo, limite, valor, formato, premiação, regulamento e imagem opcional.
+- Estados: Rascunho, Inscrições abertas, Inscrições encerradas, Em andamento, Concluído e Cancelado.
+- CRUD e transições administrativas protegidos no backend.
+- Filtros por modalidade, cidade, data e status.
+- Inscrição e cancelamento pelo jogador, prevenção de duplicidade, limite de vagas e consulta de participantes.
+- Seed idempotente com exemplos de inscrições abertas, evento futuro, em andamento e concluído.
+
+### Parceiros
+
+- Perfil esportivo com modalidade principal e secundárias, nível, cidade, regiões, objetivo, apresentação, posição, avatar e visibilidade.
+- Disponibilidade com múltiplos dias e faixas de horário editáveis.
+- Busca paginada por nome, cidade, modalidade, nível e objetivo.
+- Interesse sem duplicidade, cancelamento, solicitações enviadas/recebidas, aceite e recusa.
+- Estados Pendente, Aceito, Recusado e Cancelado; contato liberado após aceite.
+- Atividade e notificação geradas nas mudanças relevantes.
+
+### Perfil, preferências e usuários
+
+- Perfil compartilhado entre os dois papéis, com nome, e-mail, telefone, cidade, avatar, nível, modalidades, biografia e disponibilidade.
+- Resumo de reservas, avaliações e conquistas, além do histórico básico.
+- Alteração de senha com validação da senha atual e regras de força.
+- Preferências de tema, notificações, lembretes, e-mail, navegador, cidade, modalidades, horários, privacidade, descoberta por parceiros e idioma.
+- Cadastro público e criação administrativa de usuários com autorização por perfil.
+- Administração com busca, filtros, ativação/inativação, redefinição de senha e consulta de reservas e pagamentos.
+
+### Pagamentos, avaliações e ranking
+
+- PIX e cartão demonstrativos, com atualização automática da reserva após aprovação.
+- Histórico, filtros, detalhes e comprovante demonstrativo em texto/impressão.
+- Estorno permitido apenas ao administrador e somente para pagamento aprovado; a reserva vinculada é cancelada quando ainda não está concluída.
+- Avaliação de 1 a 5 estrelas permitida apenas ao dono de uma reserva concluída e no máximo uma vez por reserva.
+- Média por quadra calculada a partir das avaliações persistidas.
+- Ranking filtrado por período (`WEEKLY`, `MONTHLY`, `ANNUAL`) e modalidade, com pontos por reservas, horas e conquistas desbloqueadas.
+
+### Configurações
+
+A área administrativa possui oito abas persistentes:
+
+- Empresa: nome, razão social, documento, contato, endereço e fuso horário.
+- Funcionamento: abertura, fechamento, dias e modalidades ativas.
+- Reservas: cancelamento, duração mínima, antecedência e duração dos slots.
+- Preços: valor base por modalidade.
+- Pagamentos: métodos aceitos e chave PIX.
+- Notificações: e-mail, navegador e antecedência do lembrete.
+- Aparência: cor principal, logotipo e tema padrão.
+- Segurança: tamanho/força de senha, duração da sessão e cadastro público.
+
+Os valores são carregados da fonte ativa, validados, salvos e aplicados aos fluxos de reserva e pagamento.
+
+## UX transversal e acessibilidade
+
+- Sidebar recolhível no desktop, drawer no mobile e navegação inferior para ações frequentes.
+- Badge discreto “Modo demo” na sidebar/drawer; o aviso completo aparece somente no primeiro acesso e pode ser reaberto.
+- Menu de perfil funcional, fechado por Escape ou clique externo, com troca de conta demo e links para perfil/preferências.
+- Busca global por quadras, reservas, pagamentos, usuários, campeonatos e parceiros, com debounce, grupos, teclado e estado vazio.
+- Central de notificações com contador, leitura individual, marcar todas e navegação para o conteúdo relacionado.
+- Modais em portal com foco inicial, focus trap, Escape, restauração de foco e bloqueio de scroll.
+- Labels associados, foco visível, textos alternativos, regiões anunciadas e estados semânticos.
+- Alvos de toque de pelo menos 44 px nas principais ações em tablet/mobile.
+- Suporte a `prefers-reduced-motion` e contraste revisado nos temas claro e escuro.
 
 ## Arquitetura
 
-~~~mermaid
+```mermaid
 flowchart LR
     B["Navegador"] --> R["React + TypeScript + Vite"]
-    R -->|"/api em desenvolvimento"| VP["Proxy do Vite"]
-    R -->|"/api em Docker"| N["Nginx"]
+    R -->|"/api no desenvolvimento"| VP["Proxy do Vite"]
+    R -->|"/api no Compose"| N["Nginx"]
     VP --> S["Spring Boot API"]
     N --> S
     S --> J["Spring Security + JWT"]
-    S --> F["Flyway + JPA validate"]
-    F --> P[("PostgreSQL")]
-    R -. "falha de transporte/ambiente demo" .-> D["Estado demonstrativo em memória"]
-~~~
+    S --> F["Services transacionais + DTOs"]
+    F --> M["Flyway + JPA validate"]
+    M --> P[("PostgreSQL")]
+    R -. "API indisponível" .-> D["Modo demo persistido no navegador"]
+```
 
-O frontend tenta a API primeiro. A autenticação só cai para as credenciais locais quando a API está inacessível ou responde com falha de infraestrutura; credenciais rejeitadas não ativam o fallback. Módulos secundários usam carregamento resiliente, sem derrubar o núcleo se um endpoint opcional estiver indisponível.
+O frontend tenta a API primeiro. O fallback local só é ativado diante de falha de infraestrutura/transporte; credenciais rejeitadas pela API não são aceitas pelo modo demo. Respostas assíncronas antigas não podem sobrescrever uma sessão mais recente.
+
+## Modo conectado e modo demo
+
+### Modo real
+
+- Autenticação e autorização são processadas pela API.
+- Dados operacionais são carregados do PostgreSQL e não são gravados como coleções no `localStorage`.
+- Comunidade, comentários, curtidas, campeonatos, inscrições, perfis esportivos, interesses, perfil, preferências, configurações, avaliações, notificações, reservas e pagamentos demo usam endpoints reais.
+- O badge de armazenamento local não é exibido.
+
+### Modo demonstração local
+
+- Ativado automaticamente quando a API está indisponível.
+- Estado funcional persistido em `playspace-demo-state-v3`, com gravação debounced.
+- Tema e sessão usam chaves separadas; trocar de conta não mistura coleções da API entre usuários.
+- Criações, edições, curtidas, comentários, inscrições, interesses, perfil, preferências, avaliações, reservas e estornos permanecem após atualizar a página.
+- O aviso completo aparece uma vez; depois permanece apenas o badge “Modo demo” com explicação acessível.
+- PIX, cartão, comprovante e estorno não movimentam dinheiro real.
 
 ## Regras de negócio e segurança
 
-- Funcionamento entre 08:00 e 22:00 e duração mínima de 60 minutos.
-- Reserva proibida no passado, acima da capacidade ou em quadra indisponível.
-- Valor calculado exclusivamente pelo servidor conforme duração e preço/hora.
-- Sobreposição bloqueada para <code>PENDENTE</code>, <code>CONFIRMADA</code> e <code>EM_ANDAMENTO</code>.
-- Lock pessimista na quadra para serializar tentativas concorrentes.
-- Cliente só cria, paga e cancela reservas próprias; cancelamento exige duas horas de antecedência.
-- Máquina de estados validada no serviço de reservas.
-- Pagamento aprovado duplicado bloqueado; status de aprovação não é confiado ao cliente.
-- Cancelar reserva também cancela pagamentos pendentes ou aprovados na mesma transação.
-- JWT validado a cada requisição, inclusive estado ativo/bloqueado do usuário.
-- Respostas não autenticadas usam 401; falta de permissão usa 403; conflitos usam 409.
-- Notificações protegidas contra IDOR.
-- E-mail único sem diferenciar maiúsculas/minúsculas.
-- Senha administrativa provisória exige tamanho, maiúscula, minúscula, número e símbolo.
+- JWT stateless validado em todas as rotas protegidas, inclusive status ativo/bloqueado do usuário.
+- 401 para ausência/falha de autenticação, 403 para autorização e 409 para conflitos de negócio.
+- Usuário comum não cria administradores e não altera dados de outras contas.
+- E-mail único sem diferenciar maiúsculas de minúsculas.
 - Autoinativação e remoção do último administrador ativo são bloqueadas.
+- Publicações e comentários respeitam autoria; o administrador possui permissão explícita de moderação.
+- Interesse e inscrição duplicados são bloqueados no serviço e no banco quando aplicável.
+- Reserva no passado, além da antecedência, fora do funcionamento, acima da capacidade ou em quadra indisponível é rejeitada.
+- Valor da reserva é calculado no servidor conforme duração e preço da quadra.
+- Estados ocupados não podem se sobrepor; criação concorrente usa lock pessimista.
+- Cliente só cria, paga, cancela e avalia reservas próprias.
+- Avaliação exige reserva concluída e possui restrição única por reserva.
+- Aprovação duplicada e métodos desabilitados nas configurações são bloqueados.
+- Estorno é administrativo, gera auditoria/notificação e registra `refundedAt`.
 - Exclusão de quadra é lógica e preserva o histórico.
-- Auditoria persistida para login, usuários, quadras, reservas e pagamentos.
-- DTOs mínimos nos endpoints de disponibilidade e comunidade evitam expor relações JPA ou dados privados.
-- CORS e segredo JWT são configurados por ambiente.
+- Tratamento global fornece mensagens amigáveis e validação de payload.
+- CORS, segredo JWT, credenciais e perfil ativo são configurados por ambiente.
 
 ## Stack
 
 | Camada | Tecnologias |
 | --- | --- |
-| Frontend | React 18, TypeScript, Vite 6, React Router, Tailwind CSS, Recharts 3, Lucide |
+| Frontend | React 18, TypeScript 5.7, Vite 6, React Router 7, Tailwind CSS 3, Recharts 3, Lucide |
 | Backend | Java 21, Spring Boot 3.4, Spring Security, JWT/JJWT, Bean Validation, JPA/Hibernate |
-| Dados | PostgreSQL 16, Flyway, H2 PostgreSQL mode nos testes |
+| Dados | PostgreSQL 16, Flyway, H2 em modo PostgreSQL nos testes |
 | Infra | Docker, Docker Compose, Nginx |
-| Testes | Vitest 4, Testing Library, JUnit 5, Spring Boot Test, MockMvc |
+| Testes | Vitest 4, Testing Library, JUnit 5, Spring Boot Test e MockMvc |
 | CI | GitHub Actions com Node 22 e Temurin 21 |
 
 ## Credenciais de demonstração
 
 | Perfil | E-mail | Senha |
 | --- | --- | --- |
-| Administrador | <code>admin@playspace.com</code> | <code>Admin@123</code> |
-| Cliente | <code>cliente@playspace.com</code> | <code>Cliente@123</code> |
+| Administrador | `admin@playspace.com` | `Admin@123` |
+| Cliente/Jogador | `cliente@playspace.com` | `Cliente@123` |
 
-O seeder só é executado nos perfis <code>demo</code> e <code>test</code>.
+O seed backend é executado somente nos perfis `demo` e `test` e é idempotente.
 
 ## Execução com Docker
 
 Pré-requisito: Docker Desktop com Docker Compose v2.
 
-~~~powershell
+```powershell
 Copy-Item .env.example .env
 docker compose up --build
-~~~
+```
 
 Em macOS/Linux:
 
-~~~bash
+```bash
 cp .env.example .env
 docker compose up --build
-~~~
+```
 
 Acessos padrão:
 
-- Frontend: http://localhost:3002
-- API: http://localhost:28080
-- Swagger: http://localhost:28080/swagger-ui.html
+- Frontend: <http://localhost:3002>
+- API: <http://localhost:28080>
+- Swagger: <http://localhost:28080/swagger-ui.html>
 - PostgreSQL: acessível apenas na rede interna do Compose.
 
-Antes de qualquer uso fora de uma demonstração local, altere <code>JWT_SECRET</code>, <code>POSTGRES_PASSWORD</code>, origens CORS e desative o perfil <code>demo</code>.
+Antes de usar fora de uma demonstração local, altere `JWT_SECRET`, `POSTGRES_PASSWORD`, origens CORS e desative o perfil `demo`.
 
 ### Banco anterior ao Flyway
 
-O baseline automático está intencionalmente desabilitado. Um banco não vazio sem <code>flyway_schema_history</code> falhará em vez de assumir um estado desconhecido.
+O baseline automático está desabilitado. Um banco não vazio sem `flyway_schema_history` falha de forma segura em vez de assumir um schema desconhecido.
 
-Para um volume local descartável:
+Para recriar apenas um volume local descartável:
 
-~~~powershell
+```powershell
 # Atenção: remove todos os dados locais do Compose.
 docker compose down -v
 docker compose up --build
-~~~
+```
 
-Para um banco que contenha dados reais, crie um baseline auditado; não apague o volume.
+Para um banco com dados reais, crie um baseline auditado; não apague o volume.
 
 ## Execução manual
 
-Pré-requisitos: Java 21, Maven 3.9+, Node.js 22 e PostgreSQL 16 acessível.
+Pré-requisitos: Java 21, Maven 3.9+, Node.js 22 e PostgreSQL 16.
 
 Backend em PowerShell:
 
-~~~powershell
+```powershell
 cd backend
 $env:SPRING_PROFILES_ACTIVE = "demo"
 $env:JWT_SECRET = "substitua-por-um-segredo-com-pelo-menos-32-bytes"
@@ -198,70 +294,207 @@ $env:SPRING_DATASOURCE_URL = "jdbc:postgresql://localhost:5432/playspace"
 $env:SPRING_DATASOURCE_USERNAME = "playspace"
 $env:SPRING_DATASOURCE_PASSWORD = "playspace"
 mvn spring-boot:run
-~~~
+```
 
 Frontend:
 
-~~~powershell
+```powershell
 cd frontend
 npm ci
 npm run dev
-~~~
+```
 
-O Vite atende em http://localhost:5173 e encaminha <code>/api</code> para http://localhost:8080.
+O Vite atende em <http://localhost:5173> e encaminha `/api` para <http://localhost:8080>.
 
 ## Variáveis de ambiente
 
 | Variável | Uso | Padrão de demonstração |
 | --- | --- | --- |
-| <code>POSTGRES_DB</code> | Banco criado pelo Compose | <code>playspace</code> |
-| <code>POSTGRES_USER</code> | Usuário PostgreSQL | <code>playspace</code> |
-| <code>POSTGRES_PASSWORD</code> | Senha PostgreSQL | <code>playspace</code> |
-| <code>SPRING_DATASOURCE_URL</code> | URL JDBC | rede interna do Compose |
-| <code>SPRING_DATASOURCE_USERNAME</code> | Usuário JDBC | <code>playspace</code> |
-| <code>SPRING_DATASOURCE_PASSWORD</code> | Senha JDBC | <code>playspace</code> |
-| <code>SPRING_PROFILES_ACTIVE</code> | Ativa dados demo | <code>demo</code> no Compose |
-| <code>JWT_SECRET</code> | Chave HMAC obrigatória | placeholder local; troque |
-| <code>JWT_EXPIRATION_MINUTES</code> | Duração do token | <code>120</code> |
-| <code>CORS_ALLOWED_ORIGINS</code> | Origens separadas por vírgula | portas locais |
-| <code>BACKEND_HOST_PORT</code> | Porta externa da API | <code>28080</code> |
-| <code>FRONTEND_HOST_PORT</code> | Porta externa do Nginx | <code>3002</code> |
-| <code>VITE_API_URL</code> | Base da API no frontend | <code>/api</code> |
+| `POSTGRES_DB` | Banco criado pelo Compose | `playspace` |
+| `POSTGRES_USER` | Usuário PostgreSQL | `playspace` |
+| `POSTGRES_PASSWORD` | Senha PostgreSQL | `playspace` |
+| `SPRING_DATASOURCE_URL` | URL JDBC | Rede interna do Compose |
+| `SPRING_DATASOURCE_USERNAME` | Usuário JDBC | `playspace` |
+| `SPRING_DATASOURCE_PASSWORD` | Senha JDBC | `playspace` |
+| `SPRING_PROFILES_ACTIVE` | Ativa dados demo | `demo` no Compose |
+| `JWT_SECRET` | Chave HMAC obrigatória | Placeholder local; troque |
+| `JWT_EXPIRATION_MINUTES` | Duração do token | `120` |
+| `CORS_ALLOWED_ORIGINS` | Origens separadas por vírgula | Portas locais |
+| `BACKEND_HOST_PORT` | Porta externa da API | `28080` |
+| `FRONTEND_HOST_PORT` | Porta externa do Nginx | `3002` |
+| `VITE_API_URL` | Base da API no frontend | `/api` |
 
-## Endpoints
+## API por módulo
 
-### Públicos
+Todos os caminhos abaixo usam o prefixo `/api`.
 
-- <code>POST /api/auth/login</code>
-- <code>GET /api/courts</code>
-- <code>/swagger-ui/**</code> e <code>/v3/api-docs/**</code>
+### Autenticação e conta
 
-### Autenticados
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `POST /auth/login` | Público | Login e emissão do JWT |
+| `POST /auth/register` | Público, se habilitado | Cadastro exclusivo de Cliente/Jogador |
+| `GET /auth/me` | Autenticado | Sessão atual |
+| `GET /profile` / `PUT /profile` | Autenticado | Consultar e editar perfil |
+| `DELETE /profile/avatar` | Autenticado | Remover avatar |
+| `PUT /profile/password` | Autenticado | Trocar senha |
+| `GET /profile/summary` | Autenticado | Resumo de reservas, avaliações e conquistas |
+| `GET /profile/history` | Autenticado | Histórico básico |
+| `GET /profile/preferences` / `PUT /profile/preferences` | Autenticado | Preferências persistentes |
 
-- Autenticação: <code>GET /api/auth/me</code>
-- Quadras: <code>GET /api/courts/{id}</code>
-- Reservas: <code>GET /api/reservations/my</code>, <code>GET /api/reservations/availability</code>, <code>POST /api/reservations</code>, <code>PUT /api/reservations/{id}/cancel</code>
-- Pagamentos: <code>GET /api/payments/my</code>, <code>POST /api/payments/demo</code>
-- Notificações: listagem, contador, leitura e limpeza em <code>/api/notifications</code>
-- Comunidade: feed, curtidas, parceiros, campeonatos, conquistas, avaliações e ranking em <code>/api/community</code>
-- Cliente: <code>GET /api/dashboard/client</code>
-- Assistente: <code>POST /api/ai/ask</code>
-- Status: <code>GET /api/status</code>
+### Usuários
 
-### Administrador
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `GET /users` / `GET /users/search` | Administrador | Listagem, busca e filtros |
+| `GET /users/{id}` | Administrador | Detalhes |
+| `GET /users/{id}/reservations` | Administrador | Reservas do usuário |
+| `GET /users/{id}/payments` | Administrador | Pagamentos do usuário |
+| `POST /users` | Administrador | Criar usuário |
+| `PUT /users/{id}` | Administrador | Editar usuário/perfil |
+| `PUT /users/{id}/status` | Administrador | Ativar ou inativar |
+| `PUT /users/{id}/password` | Administrador | Redefinir senha |
+| `DELETE /users/{id}` | Administrador | Inativação protegida |
 
-- Quadras: criar, editar e arquivar em <code>/api/courts</code>
-- Reservas: listagem global, agenda semanal e transição de status em <code>/api/reservations</code>
-- Pagamentos: <code>GET /api/payments</code>
-- Usuários: listar, criar, editar e inativar em <code>/api/users</code>
-- Dashboard: <code>GET /api/dashboard/admin</code>
-- Relatórios: resumo e exportações em <code>/api/reports</code>
-- Configurações: <code>GET /api/settings</code>
-- Campeonatos: <code>POST /api/community/championships</code>
+### Quadras, reservas e pagamentos
+
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `GET /courts` | Público | Listar quadras |
+| `GET /courts/{id}` | Autenticado | Detalhar uma quadra |
+| `POST /courts` / `PUT /courts/{id}` / `DELETE /courts/{id}` | Administrador | CRUD e arquivamento lógico |
+| `GET /reservations/my` | Cliente | Reservas próprias |
+| `GET /reservations/availability` | Autenticado | Disponibilidade sem dados privados |
+| `POST /reservations` | Autenticado | Criar reserva |
+| `PUT /reservations/{id}/cancel` | Dono/admin | Cancelar reserva |
+| `GET /reservations` / `GET /reservations/week` | Administrador | Listagem e agenda operacional |
+| `PUT /reservations/{id}/status/{status}` | Administrador | Transição de status |
+| `GET /payments/my` | Cliente | Pagamentos próprios |
+| `POST /payments/demo` | Autenticado | PIX/cartão demonstrativo |
+| `GET /payments` | Administrador | Histórico global |
+| `POST /payments/{id}/refund` | Administrador | Estorno demonstrativo auditado |
+
+### Comunidade, avaliações e ranking
+
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `GET /community/posts?page=&size=` | Autenticado | Feed paginado |
+| `GET /community/posts/{id}` | Autenticado | Detalhes da publicação |
+| `POST /community/posts` | Autenticado | Criar publicação |
+| `PUT /community/posts/{id}` / `DELETE /community/posts/{id}` | Autor/admin | Editar ou excluir |
+| `POST /community/posts/{id}/likes` / `DELETE /community/posts/{id}/likes` | Autenticado | Curtir/descurtir |
+| `GET /community/posts/{id}/comments` | Autenticado | Comentários paginados |
+| `POST /community/posts/{id}/comments` | Autenticado | Criar comentário |
+| `PUT /community/comments/{id}` / `DELETE /community/comments/{id}` | Autor/admin | Editar ou excluir comentário |
+| `GET /community/reviews` | Autenticado | Avaliações recentes |
+| `POST /community/reviews` | Cliente | Avaliar reserva concluída |
+| `GET /community/ranking?period=&modality=` | Autenticado | Ranking filtrado |
+| `GET /community/achievements/my` | Autenticado | Conquistas da conta |
+
+`GET /community/feed`, `POST|DELETE /community/feed/{id}/like`, `GET /community/partners`, `GET|POST /community/championships` e `POST /community/championships/{id}/enroll` permanecem como endpoints de compatibilidade para clientes anteriores. Os fluxos novos usam `/community/posts`, `/partners` e `/championships`.
+
+### Campeonatos
+
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `GET /championships` / `GET /championships/{id}` | Autenticado | Filtros, paginação e detalhes |
+| `POST /championships` | Administrador | Criar campeonato |
+| `PUT /championships/{id}` | Administrador | Editar campeonato |
+| `PATCH /championships/{id}/status` | Administrador | Alterar estado |
+| `DELETE /championships/{id}` | Administrador | Excluir quando permitido |
+| `POST /championships/{id}/enrollments` | Cliente | Inscrever-se |
+| `DELETE /championships/{id}/enrollments/my` | Cliente | Cancelar inscrição própria |
+| `GET /championships/{id}/participants` | Autenticado | Participantes paginados |
+| `GET /championships/enrollments/my` | Cliente | Inscrições próprias |
+
+### Parceiros
+
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `GET /partners/profiles/me` | Cliente | Perfil esportivo próprio |
+| `PUT /partners/profiles/me` | Cliente | Salvar perfil e horários |
+| `GET /partners` / `GET /partners/{userId}` | Cliente | Busca paginada e detalhes |
+| `POST /partners/{userId}/interests` | Cliente | Enviar interesse sem duplicidade |
+| `GET /partner-interests?direction=&status=` | Cliente | Solicitações enviadas/recebidas |
+| `PATCH /partner-interests/{id}/accept` | Destinatário | Aceitar interesse |
+| `PATCH /partner-interests/{id}/refuse` | Destinatário | Recusar interesse |
+| `DELETE /partner-interests/{id}` | Remetente | Cancelar interesse |
+
+### Configurações, notificações e relatórios
+
+| Método e caminho | Acesso | Uso |
+| --- | --- | --- |
+| `GET /settings` / `PUT /settings` | Administrador | Configuração completa da plataforma |
+| `GET /notifications` | Autenticado | Listagem da conta |
+| `GET /notifications/unread-count` | Autenticado | Contador de não lidas |
+| `PUT /notifications/{id}/read` | Dono | Marcar como lida |
+| `DELETE /notifications` | Autenticado | Limpar notificações próprias |
+| `GET /dashboard/admin` / `GET /dashboard/client` | Por perfil | Dashboards calculados |
+| `GET /reports` | Administrador | Resumo gerencial |
+| `GET /reports/export/pdf` / `GET /reports/export/excel` | Administrador | Exportações |
+| `POST /ai/ask` | Autenticado | Assistente interno demonstrativo |
+| `GET /status` | Autenticado | Estado técnico seguro |
+
+Swagger/OpenAPI fica disponível em `/swagger-ui.html` e `/v3/api-docs/**`.
+
+## Migrations e persistência
+
+| Migration | Conteúdo |
+| --- | --- |
+| `V1__initial_schema.sql` | Schema base: usuários, quadras, reservas, pagamentos, notificações, auditoria e domínios legados |
+| `V2__community_interactions.sql` | Modalidade em publicação, comentários e curtidas com unicidade |
+| `V3__accounts_settings_championships_partners.sql` | Perfil/preferências, configurações, campeonatos, inscrições, perfil esportivo, disponibilidades e interesses |
+| `V4__review_uniqueness.sql` | Vínculo da avaliação à reserva e prevenção de avaliação duplicada |
+| `V5__payment_refund_timestamp.sql` | Data/hora de estorno em pagamentos |
+
+Hibernate opera com `ddl-auto=validate`; nenhuma entidade altera o schema fora das migrations. Os seeders verificam registros existentes antes de criar dados e não duplicam conteúdo a cada inicialização.
+
+## Como validar os principais fluxos
+
+### Comunidade
+
+1. Entre como cliente e abra `/app/comunidade`.
+2. Crie uma publicação, edite-a e teste curtir/descurtir.
+3. Abra comentários, valide o bloqueio do conteúdo vazio, crie, edite e exclua um comentário.
+4. Use Compartilhar; o navegador usa Web Share ou copia o conteúdo/link.
+5. Atualize a página e confirme a persistência.
+6. Entre como administrador para validar a moderação de conteúdo de terceiros.
+
+### Campeonatos
+
+1. Como administrador, abra `/admin/campeonatos`, crie um rascunho e edite os campos.
+2. Abra inscrições, acompanhe participantes e altere os estados permitidos.
+3. Como cliente, filtre eventos, abra os detalhes e inscreva-se.
+4. Repita a inscrição para confirmar o bloqueio de duplicidade e depois cancele quando permitido.
+
+### Parceiros
+
+1. Como cliente, abra `/app/parceiros` e edite “Meu perfil esportivo”.
+2. Adicione modalidades, níveis e múltiplas faixas de disponibilidade.
+3. Busque outro jogador, envie interesse e confirme o bloqueio de duplicidade.
+4. Troque para a conta destinatária, aceite ou recuse; teste também o cancelamento pelo remetente.
+
+### Perfil, preferências e usuários
+
+1. Abra Perfil pelo menu, edite dados/avatar, salve e atualize a página.
+2. Troque a senha e valide a senha antiga.
+3. Em Preferências, altere tema, notificações, cidade, horários e privacidade; recarregue.
+4. Use `/cadastro` para criar uma conta pública e confirme que ela recebe somente o papel Cliente/Jogador.
+5. Como administrador, crie, edite, inative e reative um usuário em `/admin/usuarios`.
+
+### Reservas, pagamentos e avaliações
+
+1. Como cliente, selecione uma quadra, data e horário em `/app/nova-reserva`.
+2. Conclua o PIX/cartão demo e confirme a mudança da reserva para Confirmada.
+3. Abra os detalhes, histórico e comprovante.
+4. Como administrador, filtre o pagamento e teste o estorno; a reserva aberta vinculada é cancelada.
+5. Para uma reserva Concluída do cliente, envie uma avaliação e confirme que uma segunda avaliação é bloqueada.
 
 ## Qualidade e validação
 
-~~~powershell
+Comandos usados pelos gates locais e pela integração contínua:
+
+```powershell
 cd frontend
 npm run test:run
 npm run build
@@ -274,50 +507,44 @@ mvn package
 cd ..
 docker compose config --quiet
 docker compose build
-~~~
+```
 
-Estado validado desta entrega:
+Resultados da validação final:
 
-- Frontend: 18 testes de componentes, API, disponibilidade, sessão e fluxos.
-- Backend: 27 testes de integração, auditoria, regras, limites de payload, autorização, privacidade, concorrência e migração.
-- Flyway V1 aplicado antes do Hibernate <code>validate</code> nos testes.
-- Build TypeScript/Vite concluído com chunks por área.
-- Auditoria npm concluída com zero vulnerabilidades conhecidas.
-- Modelo Compose e imagens Docker de frontend/backend validados.
-- CI reproduz os mesmos gates, inclusive <code>docker compose build</code>, em <code>.github/workflows/quality.yml</code>.
+- Frontend: 9/9 arquivos e 32/32 testes Vitest/Testing Library aprovados, sem warnings. A cobertura inclui API, sessão, disponibilidade, agenda configurável, imagens, comunidade, campeonatos, parceiros, perfil, preferências, avaliações e estorno.
+- Build frontend: `tsc -b && vite build` concluído sem warnings com Vite 6.4.3, 2.200 módulos e diretório `dist` gerado.
+- Backend: 9/9 classes e 40/40 testes JUnit/MockMvc aprovados, sem falhas, erros ou testes ignorados. A suíte cobre autenticação, cadastro, autorização, regras de reserva, concorrência, comunidade, campeonatos, parceiros, avaliações, pagamentos/estorno, auditoria e migrations até V5.
+- Build backend: `mvn package -q -DskipTests` concluído e `backend/target/playspace-api-1.0.0.jar` gerado.
+- Auditoria npm: zero vulnerabilidades conhecidas.
+- `docker compose config --quiet`: configuração válida.
+- Docker: `docker compose build --progress=plain` concluído com as imagens `projetoreservadequadras-backend:latest` e `projetoreservadequadras-frontend:latest`.
+- Todos os gates finalizaram com código de saída zero.
+- O workflow em `.github/workflows/quality.yml` reproduz testes/build do frontend, testes do backend e validação/build do Compose.
 
-## Auditoria visual e acessibilidade
+## Auditoria visual e responsividade
 
-A matriz foi verificada em:
+A revisão visual final cobriu todas as páginas nos seguintes viewports:
 
-- Desktop: 1440 × 900
-- Tablet: 768 × 1024
-- Mobile: 390 × 844
+- Mobile: 360 px, 390 px e 414 px.
+- Tablet: 768 px.
+- Notebook: 1366 px.
+- Desktop Full HD: 1920 px.
 
-Foram 90 combinações rota/viewport: 30 administrativas, 39 do cliente e 21 públicas/sistema. A revisão cobriu overflow, sobreposição, contraste, alinhamento, breakpoints, modais, tabelas, calendário, alvos de toque, nomes acessíveis, texto alternativo e console.
-
-Os fluxos principais também possuem:
-
-- labels associados;
-- foco visível;
-- navegação por teclado;
-- Escape e focus trap em modais;
-- semântica nativa para formas de pagamento;
-- <code>aria-label</code>, <code>aria-expanded</code> e regiões anunciadas;
-- mínimo de 44 px para ações em tablet/mobile;
-- suporte a <code>prefers-reduced-motion</code>.
+Foram verificadas 210 combinações completas de rota/viewport — 78 administrativas, 84 do cliente e 48 públicas/sistema — mais 9 checagens focadas em mobile, totalizando 219 cenários visuais. A matriz cobriu overflow horizontal, sobreposição, alinhamento, espaçamento, contraste, modais, dropdowns, tabelas/cards responsivos, calendários, gráficos, estados vazios, foco, alvos de toque e console. Não foram observados erros de console nas matrizes PlaySpace.
 
 ## Performance
 
-- Imagens principais convertidas de aproximadamente 4,7 MB em PNG para cerca de 351 KB em WebP.
-- Landing, login, páginas de sistema, área administrativa e área do cliente carregadas sob demanda.
-- Chunks separados para React, gráficos e ícones.
-- Assets versionados com cache imutável no Nginx.
-- Imagens de quadra locais, recortadas por sprite e sem dependência de CDN.
+- Páginas públicas, administrativas e do cliente são carregadas sob demanda com `React.lazy`.
+- Vite produz chunks separados para React, gráficos, ícones e áreas funcionais.
+- Busca global usa debounce; persistência demo usa gravação debounced.
+- Dados demo não são recriados a cada render e coleções derivadas usam memoização onde há ganho real.
+- Imagens locais estão em WebP, com lazy loading, recorte consistente e fallback seguro.
+- Assets versionados recebem cache imutável no Nginx.
+- Listagens grandes usam paginação no backend e controles responsivos no frontend.
 
 ## Estrutura
 
-~~~text
+```text
 .
 ├── .github/workflows/quality.yml
 ├── backend
@@ -336,33 +563,30 @@ Os fluxos principais também possuem:
 │   └── src/test
 ├── .env.example
 └── docker-compose.yml
-~~~
+```
 
-## Deploy
+## Limitações externas conhecidas
 
-O Compose já entrega frontend Nginx, API e PostgreSQL. Para produção:
+As funcionalidades internas descritas acima estão implementadas. Os itens abaixo dependem de serviços externos e permanecem deliberadamente demonstrativos:
 
-1. use um gerenciador de segredos;
-2. remova o perfil <code>demo</code>;
-3. configure domínio, TLS e <code>CORS_ALLOWED_ORIGINS</code>;
-4. use PostgreSQL gerenciado ou volume com backup;
-5. execute os gates de CI antes de publicar;
-6. adicione observabilidade e um endpoint de health apropriado ao orquestrador.
+- Não existe gateway de pagamento homologado; PIX, cartão, comprovante e estorno não movimentam dinheiro real.
+- O clima é simulado e identificado como tal; não há integração com provedor meteorológico.
+- O assistente usa regras e dados internos; não há modelo de IA externo configurado.
+- Avatares e imagens no modo conectado usam URL pública; não há object storage nem pipeline de upload binário no backend.
+- Não há refresh token, revogação centralizada, recuperação de senha por e-mail ou rate limiting distribuído.
+- Notificações persistem dentro do produto, mas não enviam push/e-mail reais sem provedores externos.
+- O JWT fica no `localStorage` para a demonstração SPA; um ambiente de maior risco deve preferir BFF/cookie HttpOnly, rotação e proteção adicional contra XSS.
+- A concorrência automatizada usa H2 em modo PostgreSQL; teste de carga dedicado em PostgreSQL real deve integrar o plano de produção.
 
-Nenhum domínio ou pipeline de publicação externo está configurado neste repositório; o projeto não inventa uma URL de produção.
+## Preparação para produção
 
-## Limitações demonstrativas
+O Compose entrega frontend Nginx, API e PostgreSQL. Para publicar em produção:
 
-- Não há gateway de pagamento real; nenhum valor é cobrado.
-- O assistente é baseado em regras, sem modelo externo.
-- Clima, realtime e parte dos indicadores de status são simulados e rotulados.
-- Criação de anúncio de parceiro, comentários e alterações de configuração permanecem locais porque a API não oferece mutação correspondente.
-- O endpoint de inscrição em campeonato confirma uma operação demonstrativa; ainda não há gestão completa de vagas/confrontos.
-- Avatares aceitam URL e possuem fallback por iniciais; não há object storage ou upload binário.
-- Não há refresh token, revogação centralizada, rate limiting ou recuperação de senha.
-- O JWT fica em <code>localStorage</code> para viabilizar a demonstração SPA; uma produção de maior risco deve preferir sessão BFF/cookie HttpOnly e proteção adicional contra XSS.
-- Relatórios backend em PDF/CSV continuam demonstrativos; a interface administrativa exporta os dados derivados carregados.
-- A garantia de conflito usa lock da aplicação; não há exclusion constraint PostgreSQL.
-- A concorrência é testada em H2 PostgreSQL mode, não em uma instância PostgreSQL sob carga.
+1. use um gerenciador de segredos e troque todas as credenciais padrão;
+2. remova o perfil `demo` e configure domínio, TLS e `CORS_ALLOWED_ORIGINS`;
+3. use PostgreSQL gerenciado ou volume com backup e restauração testados;
+4. configure object storage, gateway, e-mail/push e observabilidade conforme a operação;
+5. adicione refresh/revogação de sessão e rate limiting de borda;
+6. execute todos os gates de CI antes de publicar.
 
-O relatório detalhado da revisão está em [docs/IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md).
+Nenhum domínio ou pipeline externo de produção é inventado neste repositório. O relatório detalhado da implementação está em [docs/IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md).

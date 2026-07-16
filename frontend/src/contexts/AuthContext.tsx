@@ -1,19 +1,20 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAppData } from './AppDataContext';
-import { ApiRequestError, getCurrentUser, loginWithApi, remoteApiEnabled } from '../lib/api';
-import { initialState } from '../lib/demoData';
+import { ApiRequestError, getCurrentUser, loginWithApi, registerWithApi, remoteApiEnabled } from '../lib/api';
 import type { Role, User } from '../lib/types';
 
 interface AuthContextValue {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<User>;
+  register: (input: { name: string; email: string; password: string; confirmation: string; phone?: string }) => Promise<User>;
   logout: () => void;
   switchAccount: (role: Role) => Promise<User>;
   sessionSource: 'api' | 'demo';
   sessionExpired: boolean;
   dismissSessionExpired: () => void;
+  updateSessionUser: (user: User) => void;
 }
 
 const SESSION_KEY = 'playspace-session-v2';
@@ -41,7 +42,7 @@ const readSession = () => {
 };
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const { demoCredentials, hydrateFromApi, resetSessionData } = useAppData();
+  const { state: appState, demoCredentials, hydrateFromApi, registerDemoUser, resetSessionData } = useAppData();
   const initialSession = useMemo(readSession, []);
   const [user, setUser] = useState<User | null>(() => initialSession?.user ?? null);
   const [token, setToken] = useState<string | null>(() => initialSession?.token ?? null);
@@ -134,12 +135,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         assertCurrentOperation(generation, authGeneration.current);
-        const found = initialState.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
-        const expectedPassword = demoCredentials[normalizedEmail as keyof typeof demoCredentials];
+        const found = appState.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
+        const passwordOverrides = JSON.parse(localStorage.getItem('playspace-demo-passwords-v1') || '{}') as Record<string, string>;
+        const expectedPassword = passwordOverrides[normalizedEmail] ?? demoCredentials[normalizedEmail as keyof typeof demoCredentials];
         if (!found || !found.active || !expectedPassword || password !== expectedPassword) throw new Error('Credenciais inválidas ou usuário inativo.');
         const generatedToken = `demo-jwt-${found.role.toLowerCase()}-${Date.now()}`;
         commitSession(found, generatedToken, 'demo');
         return found;
+      },
+      register: async (input) => {
+        const normalizedEmail = input.email.trim().toLowerCase();
+        const generation = beginSessionTransition();
+        if (remoteApiEnabled) {
+          try {
+            const authenticated = await registerWithApi({ ...input, email: normalizedEmail });
+            assertCurrentOperation(generation, authGeneration.current);
+            commitSession(authenticated.user, authenticated.token, 'api');
+            await hydrateFromApi(authenticated.token, authenticated.user);
+            return authenticated.user;
+          } catch (error) {
+            const apiUnavailable = error instanceof ApiRequestError && (error.status === 0 || error.status >= 500);
+            if (!apiUnavailable) throw error;
+          }
+        }
+        assertCurrentOperation(generation, authGeneration.current);
+        const created = registerDemoUser({ name: input.name, email: normalizedEmail, password: input.password, phone: input.phone });
+        commitSession(created, `demo-jwt-cliente-${Date.now()}`, 'demo');
+        return created;
       },
       logout: () => {
         beginSessionTransition();
@@ -148,6 +170,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const email = role === 'ADMIN' ? 'admin@playspace.com' : 'cliente@playspace.com';
         const password = role === 'ADMIN' ? 'Admin@123' : 'Cliente@123';
         const normalizedEmail = email.toLowerCase();
+
+        if (sessionSource === 'demo') {
+          const found = appState.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
+          if (!found || !found.active) throw new Error('Conta demo indisponível.');
+          const generatedToken = `demo-jwt-${found.role.toLowerCase()}-${Date.now()}`;
+          commitSession(found, generatedToken, 'demo');
+          return found;
+        }
+
         const generation = beginSessionTransition();
 
         if (remoteApiEnabled) {
@@ -165,7 +196,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         assertCurrentOperation(generation, authGeneration.current);
-        const found = initialState.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
+        const found = appState.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
         if (!found || !found.active) throw new Error('Conta demo indisponível.');
         const generatedToken = `demo-jwt-${found.role.toLowerCase()}-${Date.now()}`;
         commitSession(found, generatedToken, 'demo');
@@ -173,9 +204,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       sessionSource,
       sessionExpired,
-      dismissSessionExpired: () => setSessionExpired(false)
+      dismissSessionExpired: () => setSessionExpired(false),
+      updateSessionUser: (nextUser) => setUser(nextUser)
     }),
-    [beginSessionTransition, commitSession, demoCredentials, hydrateFromApi, sessionExpired, sessionSource, token, user]
+    [appState.users, beginSessionTransition, commitSession, demoCredentials, hydrateFromApi, registerDemoUser, sessionExpired, sessionSource, token, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

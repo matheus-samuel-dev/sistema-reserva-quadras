@@ -19,6 +19,30 @@ export function PaymentFlow({ reservation, onPaid }: { reservation: Reservation;
   const [copied, setCopied] = useState(false);
   const pixCode = `PLAYSPACE-DEMO-${reservation.code}-${reservation.totalValue.toFixed(2)}`;
 
+  const copyPixCode = async () => {
+    setError('');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(pixCode);
+      } else {
+        const field = document.createElement('textarea');
+        field.value = pixCode;
+        field.setAttribute('readonly', '');
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        field.select();
+        const copiedWithFallback = document.execCommand('copy');
+        field.remove();
+        if (!copiedWithFallback) throw new Error('Cópia não suportada.');
+      }
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setError('Não foi possível copiar automaticamente. Selecione o código PIX acima e copie manualmente.');
+    }
+  };
+
   return (
     <div className="grid gap-4">
       <div className="soft-panel rounded-lg p-4">
@@ -81,10 +105,7 @@ export function PaymentFlow({ reservation, onPaid }: { reservation: Reservation;
           <button
             className="ghost-button mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
             type="button"
-            onClick={async () => {
-              await navigator.clipboard?.writeText(pixCode);
-              setCopied(true);
-            }}
+            onClick={() => void copyPixCode()}
           >
             <Copy className="h-3.5 w-3.5" aria-hidden="true" />
             {copied ? 'Código copiado' : 'Copiar código PIX'}

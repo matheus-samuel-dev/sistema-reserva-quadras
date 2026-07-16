@@ -1,6 +1,7 @@
 package com.playspace.api.community;
 
 import java.time.OffsetDateTime;
+import com.playspace.api.court.Modality;
 
 public record CommunityPostResponse(
         Long id,
@@ -9,11 +10,14 @@ public record CommunityPostResponse(
         String avatarUrl,
         String content,
         String type,
+        Modality modality,
         int likes,
         int comments,
-        OffsetDateTime createdAt
+        boolean likedByCurrentUser,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {
-    static CommunityPostResponse from(CommunityPost post) {
+    static CommunityPostResponse from(CommunityPost post, boolean likedByCurrentUser) {
         return new CommunityPostResponse(
                 post.getId(),
                 post.getAuthor().getId(),
@@ -21,9 +25,16 @@ public record CommunityPostResponse(
                 post.getAuthor().getAvatarUrl(),
                 post.getContent(),
                 post.getType(),
+                post.getModality(),
                 post.getLikes(),
                 post.getComments(),
-                post.getCreatedAt()
+                likedByCurrentUser,
+                post.getCreatedAt(),
+                post.getUpdatedAt()
         );
+    }
+
+    static CommunityPostResponse from(CommunityPost post) {
+        return from(post, false);
     }
 }

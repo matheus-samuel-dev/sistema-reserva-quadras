@@ -115,8 +115,8 @@ public class DashboardController {
                 "reservations", myReservations,
                 "stats", stats,
                 "recommendations", List.of(
-                        "Sua quadra favorita tem horarios livres hoje as 18:00.",
-                        "Beach Tennis esta em alta nesta semana.",
+                        "Sua quadra favorita tem horários livres hoje às 18:00.",
+                        "Beach Tennis está em alta nesta semana.",
                         "Quadras cobertas recomendadas se chover no fim do dia."
                 )
         );

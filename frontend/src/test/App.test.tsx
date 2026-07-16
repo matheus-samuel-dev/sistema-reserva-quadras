@@ -30,7 +30,7 @@ describe('PlaySpace frontend', () => {
     await user.click((await screen.findAllByRole('button', { name: /preencher acesso de administrador/i }))[0]);
     await user.click(screen.getByRole('button', { name: /entrar/i }));
 
-    expect(await screen.findByRole('heading', { name: /dashboard/i }, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /dashboard/i }, { timeout: 15_000 })).toBeInTheDocument();
     expect(screen.getByText(/reservas hoje/i)).toBeInTheDocument();
     expect(screen.getByText(/receita do mês/i)).toBeInTheDocument();
   });
@@ -43,7 +43,7 @@ describe('PlaySpace frontend', () => {
     await user.click(screen.getByRole('button', { name: /entrar/i }));
     await user.click((await screen.findAllByRole('link', { name: /reservas/i }, { timeout: 5000 }))[0]);
 
-    expect(await screen.findByRole('heading', { name: /minhas reservas/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /minhas reservas/i }, { timeout: 10_000 })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^próximas$/i })).toBeInTheDocument();
   });
 

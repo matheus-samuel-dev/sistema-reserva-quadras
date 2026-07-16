@@ -17,25 +17,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     ResponseEntity<ApiError> notFound(NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(404, "Recurso nao encontrado", List.of(ex.getMessage())));
+                .body(ApiError.of(404, "Recurso não encontrado", List.of(ex.getMessage())));
     }
 
     @ExceptionHandler(NoSuchElementException.class)
     ResponseEntity<ApiError> missingResource(NoSuchElementException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(404, "Recurso nao encontrado", List.of("O recurso solicitado nao existe.")));
+                .body(ApiError.of(404, "Recurso não encontrado", List.of("O recurso solicitado não existe.")));
     }
 
     @ExceptionHandler(UnauthorizedException.class)
     ResponseEntity<ApiError> unauthorized(UnauthorizedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiError.of(401, "Nao autenticado", List.of(ex.getMessage())));
+                .body(ApiError.of(401, "Não autenticado", List.of(ex.getMessage())));
     }
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiError> business(BusinessException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiError.of(400, "Regra de negocio", List.of(ex.getMessage())));
+                .body(ApiError.of(400, "Regra de negócio", List.of(ex.getMessage())));
     }
 
     @ExceptionHandler(ConflictException.class)
@@ -47,7 +47,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiError> forbidden(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiError.of(403, "Acesso negado", List.of("Voce nao tem permissao para esta acao.")));
+                .body(ApiError.of(403, "Acesso negado", List.of("Você não tem permissão para esta ação.")));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -55,7 +55,7 @@ public class GlobalExceptionHandler {
         var details = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .toList();
-        return ResponseEntity.badRequest().body(ApiError.of(400, "Validacao", details));
+        return ResponseEntity.badRequest().body(ApiError.of(400, "Validação", details));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -63,19 +63,19 @@ public class GlobalExceptionHandler {
         var details = ex.getConstraintViolations().stream()
                 .map(v -> v.getPropertyPath() + ": " + v.getMessage())
                 .toList();
-        return ResponseEntity.badRequest().body(ApiError.of(400, "Validacao", details));
+        return ResponseEntity.badRequest().body(ApiError.of(400, "Validação", details));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiError> malformedPayload(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiError.of(400, "Requisicao invalida", List.of("O corpo da requisicao esta ausente ou malformado.")));
+                .body(ApiError.of(400, "Requisição inválida", List.of("O corpo da requisição está ausente ou malformado.")));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiError> dataConflict(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiError.of(409, "Conflito de dados", List.of("A operacao conflita com um registro existente.")));
+                .body(ApiError.of(409, "Conflito de dados", List.of("A operação conflita com um registro existente.")));
     }
 
     @ExceptionHandler(Exception.class)

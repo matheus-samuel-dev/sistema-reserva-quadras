@@ -16,6 +16,6 @@ public class CurrentUserService {
 
     public AppUser user() {
         var email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return users.findByEmail(email).orElseThrow(() -> new NotFoundException("Usuario autenticado nao encontrado."));
+        return users.findByEmail(email).orElseThrow(() -> new NotFoundException("Usuário autenticado não encontrado."));
     }
 }

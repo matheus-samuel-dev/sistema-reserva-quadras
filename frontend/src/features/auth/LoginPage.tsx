@@ -144,6 +144,8 @@ export function LoginPage() {
             {submitting ? 'Conectando com segurança...' : 'Entrar'}
           </button>
 
+          <p className="mt-3 flex min-h-11 flex-wrap items-center justify-center gap-x-1 text-center text-sm text-muted">Ainda não possui conta? <Link className="inline-flex min-h-11 items-center font-black text-neon underline" to="/cadastro">Criar conta de jogador</Link></p>
+
           <div className="mt-4 grid gap-2 text-sm md:hidden">
             <button className="ghost-button min-h-11 rounded-lg px-3 py-2 font-bold" type="button" onClick={() => fillAccess('ADMIN')}>Preencher acesso de administrador</button>
             <button className="ghost-button min-h-11 rounded-lg px-3 py-2 font-bold" type="button" onClick={() => fillAccess('CLIENTE')}>Preencher acesso de cliente</button>

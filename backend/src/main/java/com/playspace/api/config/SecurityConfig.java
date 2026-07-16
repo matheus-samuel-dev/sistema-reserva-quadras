@@ -51,7 +51,7 @@ public class SecurityConfig {
                             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
                             objectMapper.writeValue(response.getOutputStream(), ApiError.of(
                                     401,
-                                    "Nao autenticado",
+                                    "Não autenticado",
                                     List.of("Forneca um token valido para acessar este recurso.")
                             ));
                         })
@@ -62,11 +62,11 @@ public class SecurityConfig {
                             objectMapper.writeValue(response.getOutputStream(), ApiError.of(
                                     403,
                                     "Acesso negado",
-                                    List.of("Voce nao tem permissao para esta acao.")
+                                    List.of("Você não tem permissão para esta ação.")
                             ));
                         }))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/courts").permitAll()
                         .anyRequest().authenticated()
                 )
