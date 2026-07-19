@@ -1,6 +1,5 @@
 package com.playspace.api.settings;
 
-import com.playspace.api.court.Modality;
 import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.Map;
@@ -22,7 +21,7 @@ public record SettingsResponse(
         int minimumReservationMinutes,
         int maximumAdvanceDays,
         int slotMinutes,
-        Set<Modality> modalities,
+        Set<String> modalities,
         Map<String, BigDecimal> defaultPrices,
         boolean acceptPix,
         boolean acceptCard,

@@ -1,6 +1,5 @@
 package com.playspace.api.championship;
 
-import com.playspace.api.court.Modality;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -23,7 +22,7 @@ public interface ChampionshipRepository extends JpaRepository<ChampionshipEvent,
               and (:includeDraft = true or c.status <> com.playspace.api.championship.ChampionshipStatus.RASCUNHO)
             """)
     Page<ChampionshipEvent> search(
-            @Param("modality") Modality modality,
+            @Param("modality") String modality,
             @Param("status") ChampionshipStatus status,
             @Param("city") String city,
             @Param("fromDate") LocalDate fromDate,

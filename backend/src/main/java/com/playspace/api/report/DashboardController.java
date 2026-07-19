@@ -5,6 +5,7 @@ import com.playspace.api.community.ChampionshipRepository;
 import com.playspace.api.community.CommunityPostRepository;
 import com.playspace.api.community.ReviewRepository;
 import com.playspace.api.court.CourtRepository;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.payment.PaymentRepository;
 import com.playspace.api.payment.PaymentStatus;
 import com.playspace.api.reservation.ReservationRepository;
@@ -34,6 +35,7 @@ public class DashboardController {
     private final ChampionshipRepository championships;
     private final CommunityPostRepository posts;
     private final CurrentUserService currentUser;
+    private final SportModalityService modalities;
 
     public DashboardController(
             ReservationRepository reservations,
@@ -44,7 +46,8 @@ public class DashboardController {
             ReviewRepository reviews,
             ChampionshipRepository championships,
             CommunityPostRepository posts,
-            CurrentUserService currentUser
+            CurrentUserService currentUser,
+            SportModalityService modalities
     ) {
         this.reservations = reservations;
         this.payments = payments;
@@ -55,6 +58,7 @@ public class DashboardController {
         this.championships = championships;
         this.posts = posts;
         this.currentUser = currentUser;
+        this.modalities = modalities;
     }
 
     @GetMapping("/admin")
@@ -77,9 +81,11 @@ public class DashboardController {
         cards.put("quadraMaisReservada", "Quadra Aurora");
         cards.put("horarioMovimento", "19:00");
         cards.put("receitaPrevistaSemana", reservations.sumRevenue(weekStart, weekEnd, confirmed));
-        cards.put("modalidadeAlta", "Beach Tennis");
+        var leadingModality = reservations.countReservationsByModality().stream().findFirst()
+                .map(row -> modalities.displayName(String.valueOf(row[0]))).orElse("Sem dados");
+        cards.put("modalidadeAlta", leadingModality);
         cards.put("jogadoresAtivosHoje", users.findAll().stream().filter(u -> u.getRole().name().equals("CLIENTE")).count());
-        cards.put("clima", Map.of("temp", "27C", "hint", "Ideal para Beach Tennis"));
+        cards.put("clima", Map.of("temp", "27C", "hint", "Condições favoráveis para " + leadingModality));
         cards.put("mediaAvaliacoes", reviews.globalAverage());
 
         return Map.of(
@@ -116,7 +122,7 @@ public class DashboardController {
                 "stats", stats,
                 "recommendations", List.of(
                         "Sua quadra favorita tem horários livres hoje às 18:00.",
-                        "Beach Tennis está em alta nesta semana.",
+                        (user.getFavoriteModality() == null ? "Sua modalidade favorita" : modalities.displayName(user.getFavoriteModality())) + " está em alta nesta semana.",
                         "Quadras cobertas recomendadas se chover no fim do dia."
                 )
         );

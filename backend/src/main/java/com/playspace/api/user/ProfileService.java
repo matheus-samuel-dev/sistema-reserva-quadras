@@ -2,6 +2,8 @@ package com.playspace.api.user;
 
 import com.playspace.api.common.AuditService;
 import com.playspace.api.common.BusinessException;
+import com.playspace.api.modality.SportModality;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.payment.PaymentRepository;
 import com.playspace.api.payment.PaymentStatus;
 import com.playspace.api.reservation.ReservationRepository;
@@ -25,10 +27,11 @@ public class ProfileService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
     private final AuditService audit;
+    private final SportModalityService modalities;
 
     public ProfileService(CurrentUserService currentUser, UserRepository users, UserPreferenceRepository preferences,
                           ReservationRepository reservations, PaymentRepository payments, PasswordEncoder passwordEncoder,
-                          PasswordPolicy passwordPolicy, AuditService audit) {
+                          PasswordPolicy passwordPolicy, AuditService audit, SportModalityService modalities) {
         this.currentUser = currentUser;
         this.users = users;
         this.preferences = preferences;
@@ -37,6 +40,7 @@ public class ProfileService {
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
         this.audit = audit;
+        this.modalities = modalities;
     }
 
     @Transactional(readOnly = true)
@@ -53,10 +57,12 @@ public class ProfileService {
         user.setAvatarUrl(normalize(request.avatarUrl()));
         user.setBio(normalize(request.bio()));
         user.setSportsLevel(normalize(request.sportsLevel()));
-        user.setFavoriteModality(request.favoriteModality());
+        user.setFavoriteModality(request.favoriteModality() == null ? null
+                : modalities.requireActive(request.favoriteModality()).getCode());
         user.setAvailability(normalize(request.availability()));
-        var sports = request.practicedSports() == null ? new LinkedHashSet<String>() : request.practicedSports().stream()
-                .map(String::trim).filter(value -> !value.isBlank())
+        var sports = request.practicedSports() == null ? new LinkedHashSet<String>()
+                : modalities.requireAll(request.practicedSports()).stream()
+                .map(SportModality::getCode)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         user.setPracticedSports(sports);
         var saved = users.save(user);
@@ -128,8 +134,9 @@ public class ProfileService {
         preference.setEmailNotifications(request.emailNotifications());
         preference.setBrowserNotifications(request.browserNotifications());
         preference.setDefaultCity(normalize(request.defaultCity()));
-        preference.setFavoriteModalities(request.favoriteModalities() == null ? "" : request.favoriteModalities().stream()
-                .map(Enum::name).sorted().collect(Collectors.joining(",")));
+        preference.setFavoriteModalities(request.favoriteModalities() == null ? ""
+                : modalities.requireAll(request.favoriteModalities()).stream()
+                .map(SportModality::getCode).sorted().collect(Collectors.joining(",")));
         preference.setPreferredTimes(normalize(request.preferredTimes()));
         preference.setPrivateProfile(request.privateProfile());
         preference.setDiscoverableByPartners(request.discoverableByPartners());
@@ -150,9 +157,9 @@ public class ProfileService {
 
     private PreferenceResponse toResponse(UserPreference preference) {
         var modalities = preference.getFavoriteModalities() == null || preference.getFavoriteModalities().isBlank()
-                ? java.util.Set.<com.playspace.api.court.Modality>of()
+                ? java.util.Set.<String>of()
                 : java.util.Arrays.stream(preference.getFavoriteModalities().split(","))
-                .filter(value -> !value.isBlank()).map(com.playspace.api.court.Modality::valueOf)
+                .filter(value -> !value.isBlank())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         return new PreferenceResponse(
                 preference.getTheme(), preference.isNotificationsEnabled(), preference.getReservationReminderHours(),

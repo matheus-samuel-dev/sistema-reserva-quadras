@@ -1,6 +1,5 @@
 package com.playspace.api.community;
 
-import com.playspace.api.court.Modality;
 import com.playspace.api.user.AppUser;
 import com.playspace.api.user.UserRepository;
 import java.util.List;
@@ -47,19 +46,19 @@ public class CommunityDemoSeeder {
                 admin,
                 "Inscrições abertas para o Open PlaySpace de Beach Tennis.",
                 "CAMPEONATO",
-                Modality.BEACH_TENNIS
+                "BEACH_TENNIS"
         );
         ensurePost(
                 marina,
                 "Nova reserva criada na Quadra Aurora.",
                 "RESERVA",
-                Modality.BEACH_TENNIS
+                "BEACH_TENNIS"
         );
         ensurePost(
                 lucas,
                 "Procuro um time para partidas de Society às quintas-feiras.",
                 "PARCEIROS",
-                Modality.SOCIETY
+                "SOCIETY"
         );
 
         var allUsers = List.of(admin, marina, lucas);
@@ -88,7 +87,7 @@ public class CommunityDemoSeeder {
         }
     }
 
-    private void ensurePost(AppUser author, String content, String type, Modality modality) {
+    private void ensurePost(AppUser author, String content, String type, String modality) {
         if (posts.existsByAuthorIdAndContent(author.getId(), content)) {
             return;
         }

@@ -2,6 +2,7 @@ package com.playspace.api.community;
 
 import com.playspace.api.common.AuditService;
 import com.playspace.api.common.NotFoundException;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.notification.NotificationService;
 import com.playspace.api.security.CurrentUserService;
 import com.playspace.api.user.AppUser;
@@ -24,6 +25,7 @@ public class CommunityPostService {
     private final CurrentUserService currentUser;
     private final NotificationService notifications;
     private final AuditService audit;
+    private final SportModalityService modalities;
 
     public CommunityPostService(
             CommunityPostRepository posts,
@@ -31,7 +33,8 @@ public class CommunityPostService {
             CommunityCommentRepository comments,
             CurrentUserService currentUser,
             NotificationService notifications,
-            AuditService audit
+            AuditService audit,
+            SportModalityService modalities
     ) {
         this.posts = posts;
         this.likes = likes;
@@ -39,6 +42,7 @@ public class CommunityPostService {
         this.currentUser = currentUser;
         this.notifications = notifications;
         this.audit = audit;
+        this.modalities = modalities;
     }
 
     @Transactional(readOnly = true)
@@ -208,7 +212,8 @@ public class CommunityPostService {
         post.setContent(normalize(request.content()));
         var type = request.type() == null || request.type().isBlank() ? "COMUNIDADE" : request.type().strip();
         post.setType(type.toUpperCase(Locale.ROOT));
-        post.setModality(request.modality());
+        post.setModality(request.modality() == null || request.modality().isBlank() ? null
+                : modalities.requireActive(request.modality()).getCode());
     }
 
     private String normalize(String value) {

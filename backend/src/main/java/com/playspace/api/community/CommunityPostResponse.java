@@ -1,7 +1,6 @@
 package com.playspace.api.community;
 
 import java.time.OffsetDateTime;
-import com.playspace.api.court.Modality;
 
 public record CommunityPostResponse(
         Long id,
@@ -10,7 +9,7 @@ public record CommunityPostResponse(
         String avatarUrl,
         String content,
         String type,
-        Modality modality,
+        String modality,
         int likes,
         int comments,
         boolean likedByCurrentUser,

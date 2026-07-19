@@ -1,6 +1,5 @@
 package com.playspace.api.partner;
 
-import com.playspace.api.court.Modality;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -14,7 +13,7 @@ public record SportsProfileResponse(
         String avatarUrl,
         String city,
         Set<String> regions,
-        Modality primaryModality,
+        String primaryModality,
         List<ModalityLevelResponse> modalities,
         List<AvailabilityResponse> availabilities,
         PartnerObjective objective,
@@ -26,6 +25,6 @@ public record SportsProfileResponse(
         InterestDirection currentInterestDirection,
         OffsetDateTime updatedAt
 ) {
-    public record ModalityLevelResponse(Modality modality, SportsLevel level, boolean primary) {}
+    public record ModalityLevelResponse(String modality, SportsLevel level, boolean primary) {}
     public record AvailabilityResponse(DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {}
 }

@@ -4,7 +4,7 @@ import com.playspace.api.common.AuditService;
 import com.playspace.api.common.BusinessException;
 import com.playspace.api.common.ConflictException;
 import com.playspace.api.common.NotFoundException;
-import com.playspace.api.court.Modality;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.notification.NotificationService;
 import com.playspace.api.security.CurrentUserService;
 import com.playspace.api.user.AppUser;
@@ -33,6 +33,7 @@ public class PartnerService {
     private final CurrentUserService currentUser;
     private final NotificationService notifications;
     private final AuditService audit;
+    private final SportModalityService modalities;
 
     public PartnerService(
             SportsProfileRepository profiles,
@@ -40,7 +41,8 @@ public class PartnerService {
             UserRepository users,
             CurrentUserService currentUser,
             NotificationService notifications,
-            AuditService audit
+            AuditService audit,
+            SportModalityService modalities
     ) {
         this.profiles = profiles;
         this.interests = interests;
@@ -48,6 +50,7 @@ public class PartnerService {
         this.currentUser = currentUser;
         this.notifications = notifications;
         this.audit = audit;
+        this.modalities = modalities;
     }
 
     @Transactional(readOnly = true)
@@ -72,14 +75,16 @@ public class PartnerService {
         profile.setDiscoverable(request.discoverable());
         profile.setAvatarUrl(blankToNull(request.avatarUrl()));
 
-        var modalities = request.modalities().stream().map(item -> {
+        var primaryModality = modalities.requireActive(request.primaryModality()).getCode();
+        var profileModalities = request.modalities().stream().map(item -> {
             var modality = new SportsProfileModality();
-            modality.setModality(item.modality());
+            var code = modalities.requireActive(item.modality()).getCode();
+            modality.setModality(code);
             modality.setLevel(item.level());
-            modality.setPrimaryModality(item.modality() == request.primaryModality());
+            modality.setPrimaryModality(code.equals(primaryModality));
             return modality;
         }).collect(Collectors.toCollection(LinkedHashSet::new));
-        profile.replaceModalities(modalities);
+        profile.replaceModalities(profileModalities);
 
         var availabilities = request.availabilities() == null ? Set.<SportsAvailability>of()
                 : request.availabilities().stream().map(item -> {
@@ -99,13 +104,14 @@ public class PartnerService {
     public Page<SportsProfileResponse> search(
             String name,
             String city,
-            Modality modality,
+            String modality,
             SportsLevel level,
             PartnerObjective objective,
             Pageable pageable
     ) {
         var viewer = requireClient();
-        return profiles.search(viewer.getId(), normalizeFilter(name), normalizeFilter(city), modality, level, objective, pageable)
+        var normalizedModality = modality == null || modality.isBlank() ? null : modalities.resolveCode(modality);
+        return profiles.search(viewer.getId(), normalizeFilter(name), normalizeFilter(city), normalizedModality, level, objective, pageable)
                 .map(profile -> profileResponse(profile, viewer));
     }
 
@@ -220,12 +226,14 @@ public class PartnerService {
     }
 
     private void validateProfile(SportsProfileRequest request) {
-        var distinctModalities = request.modalities().stream().map(SportsProfileRequest.ModalityLevelRequest::modality)
+        var distinctModalities = request.modalities().stream()
+                .map(SportsProfileRequest.ModalityLevelRequest::modality)
+                .map(item -> modalities.requireActive(item).getCode())
                 .collect(Collectors.toSet());
         if (distinctModalities.size() != request.modalities().size()) {
             throw new BusinessException("Cada modalidade deve aparecer apenas uma vez no perfil.");
         }
-        if (!distinctModalities.contains(request.primaryModality())) {
+        if (!distinctModalities.contains(modalities.requireActive(request.primaryModality()).getCode())) {
             throw new BusinessException("A modalidade principal deve estar na lista de modalidades praticadas.");
         }
         if (request.availabilities() == null) {

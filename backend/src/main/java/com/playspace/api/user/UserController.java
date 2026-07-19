@@ -4,6 +4,8 @@ import com.playspace.api.common.AuditService;
 import com.playspace.api.common.BusinessException;
 import com.playspace.api.common.ConflictException;
 import com.playspace.api.common.NotFoundException;
+import com.playspace.api.modality.SportModality;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.security.CurrentUserService;
 import com.playspace.api.payment.PaymentRepository;
 import com.playspace.api.payment.PaymentStatus;
@@ -42,10 +44,11 @@ public class UserController {
     private final PasswordPolicy passwordPolicy;
     private final ReservationRepository reservations;
     private final PaymentRepository payments;
+    private final SportModalityService modalities;
 
     public UserController(UserRepository users, PasswordEncoder passwordEncoder, CurrentUserService currentUser,
                           AuditService audit, PasswordPolicy passwordPolicy, ReservationRepository reservations,
-                          PaymentRepository payments) {
+                          PaymentRepository payments, SportModalityService modalities) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.currentUser = currentUser;
@@ -53,6 +56,7 @@ public class UserController {
         this.passwordPolicy = passwordPolicy;
         this.reservations = reservations;
         this.payments = payments;
+        this.modalities = modalities;
     }
 
     @GetMapping
@@ -193,13 +197,16 @@ public class UserController {
         user.setActive(request.active());
         user.setCity(request.city());
         user.setBio(request.bio());
-        user.setFavoriteModality(request.favoriteModality());
+        user.setFavoriteModality(request.favoriteModality() == null ? null
+                : modalities.requireActive(request.favoriteModality()).getCode());
         user.setSportsLevel(request.sportsLevel());
         user.setAvatarUrl(request.avatarUrl());
         user.setPhone(request.phone());
         user.setAvailability(request.availability());
-        user.setPracticedSports(request.practicedSports() == null
-                ? new LinkedHashSet<>() : new LinkedHashSet<>(request.practicedSports()));
+        user.setPracticedSports(request.practicedSports() == null ? new LinkedHashSet<>()
+                : modalities.requireAll(request.practicedSports()).stream()
+                .map(SportModality::getCode)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
     }
 
     private AppUser find(Long id) {

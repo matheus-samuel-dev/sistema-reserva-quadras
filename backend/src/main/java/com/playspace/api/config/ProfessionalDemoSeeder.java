@@ -8,7 +8,6 @@ import com.playspace.api.championship.ChampionshipStatus;
 import com.playspace.api.championship.EnrollmentStatus;
 import com.playspace.api.court.Court;
 import com.playspace.api.court.CourtRepository;
-import com.playspace.api.court.Modality;
 import com.playspace.api.partner.PartnerInterest;
 import com.playspace.api.partner.PartnerInterestRepository;
 import com.playspace.api.partner.PartnerInterestStatus;
@@ -76,19 +75,19 @@ public class ProfessionalDemoSeeder {
             return;
         }
 
-        seedProfile(marina, PartnerObjective.JOGO_CASUAL, "São Paulo", "Pinheiros", Modality.BEACH_TENNIS,
+        seedProfile(marina, PartnerObjective.JOGO_CASUAL, "São Paulo", "Pinheiros", "BEACH_TENNIS",
                 SportsLevel.INTERMEDIARIO, DayOfWeek.MONDAY, 18, 21,
                 "Gosto de jogos equilibrados, treinos leves e novas duplas para os fins de semana.");
-        seedProfile(lucas, PartnerObjective.ENCONTRAR_TIME, "Campinas", "Cambuí", Modality.SOCIETY,
+        seedProfile(lucas, PartnerObjective.ENCONTRAR_TIME, "Campinas", "Cambuí", "SOCIETY",
                 SportsLevel.AVANCADO, DayOfWeek.THURSDAY, 19, 22,
                 "Atacante disponível para completar equipes de Society e disputar ligas locais.");
-        seedProfile(carlos, PartnerObjective.TREINO, "Santos", "Gonzaga", Modality.FUTEVOLEI,
+        seedProfile(carlos, PartnerObjective.TREINO, "Santos", "Gonzaga", "FUTEVOLEI",
                 SportsLevel.INTERMEDIARIO, DayOfWeek.WEDNESDAY, 18, 21,
                 "Procuro parceiros consistentes para evoluir fundamentos de Futevôlei.");
-        seedProfile(bia, PartnerObjective.JOGO_CASUAL, "São Paulo", "Moema", Modality.TENIS,
+        seedProfile(bia, PartnerObjective.JOGO_CASUAL, "São Paulo", "Moema", "TENIS",
                 SportsLevel.INICIANTE, DayOfWeek.SATURDAY, 8, 12,
                 "Comecei no Tênis recentemente e busco partidas amistosas aos sábados.");
-        seedProfile(joao, PartnerObjective.COMPETICAO, "Osasco", "Centro", Modality.BASQUETE,
+        seedProfile(joao, PartnerObjective.COMPETICAO, "Osasco", "Centro", "BASQUETE",
                 SportsLevel.AVANCADO, DayOfWeek.TUESDAY, 20, 23,
                 "Armador focado em treinos intensos e campeonatos amadores de Basquete.");
 
@@ -98,25 +97,25 @@ public class ProfessionalDemoSeeder {
                 "Podemos alternar treinos de condicionamento e técnica.");
 
         var open = seedChampionship(
-                "Open PlaySpace Beach 2026", Modality.BEACH_TENNIS, LocalDate.now().plusDays(18),
+                "Open PlaySpace Beach 2026", "BEACH_TENNIS", LocalDate.now().plusDays(18),
                 LocalDate.now().plusDays(20), LocalDate.now().plusDays(12), ChampionshipStatus.INSCRICOES_ABERTAS,
                 32, "Duplas com fase de grupos e eliminatórias", "Troféus e R$ 2.500 em créditos PlaySpace",
                 new BigDecimal("95.00"), "Arena PlaySpace - Setor A", "São Paulo"
         );
         seedChampionship(
-                "Liga Society Night", Modality.SOCIETY, LocalDate.now().plusDays(32),
+                "Liga Society Night", "SOCIETY", LocalDate.now().plusDays(32),
                 LocalDate.now().plusDays(60), LocalDate.now().plusDays(20), ChampionshipStatus.INSCRICOES_ENCERRADAS,
                 16, "Pontos corridos e final", "Troféu e 30 dias de quadra", new BigDecimal("280.00"),
                 "Arena Summit", "São Paulo"
         );
         var ongoing = seedChampionship(
-                "Circuito Litoral de Futevôlei", Modality.FUTEVOLEI, LocalDate.now().minusDays(2),
+                "Circuito Litoral de Futevôlei", "FUTEVOLEI", LocalDate.now().minusDays(2),
                 LocalDate.now().plusDays(1), LocalDate.now().minusDays(7), ChampionshipStatus.EM_ANDAMENTO,
                 24, "Grupos e mata-mata", "Troféus e kits esportivos", new BigDecimal("80.00"),
                 "Quadra Pulse", "Santos"
         );
         var completed = seedChampionship(
-                "Masters PlaySpace de Tênis", Modality.TENIS, LocalDate.now().minusDays(30),
+                "Masters PlaySpace de Tênis", "TENIS", LocalDate.now().minusDays(30),
                 LocalDate.now().minusDays(28), LocalDate.now().minusDays(40), ChampionshipStatus.CONCLUIDO,
                 16, "Eliminatória simples", "Troféu Masters", new BigDecimal("120.00"),
                 "Studio Tênis", "São Paulo"
@@ -132,7 +131,7 @@ public class ProfessionalDemoSeeder {
             PartnerObjective objective,
             String city,
             String region,
-            Modality modality,
+            String modality,
             SportsLevel level,
             DayOfWeek day,
             int startHour,
@@ -186,7 +185,7 @@ public class ProfessionalDemoSeeder {
 
     private ChampionshipEvent seedChampionship(
             String name,
-            Modality modality,
+            String modality,
             LocalDate start,
             LocalDate end,
             LocalDate deadline,
@@ -224,8 +223,8 @@ public class ProfessionalDemoSeeder {
         return championships.save(event);
     }
 
-    private Court court(Modality modality) {
-        return courts.findAll().stream().filter(item -> item.getModality() == modality).findFirst()
+    private Court court(String modality) {
+        return courts.findAll().stream().filter(item -> item.getModality().equals(modality)).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Quadra demo ausente para " + modality));
     }
 

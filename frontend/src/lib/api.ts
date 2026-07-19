@@ -8,6 +8,7 @@ import type {
   Court,
   CourtStatus,
   Modality,
+  ModalityCatalogItem,
   NotificationItem,
   Payment,
   PaymentMethod,
@@ -107,18 +108,16 @@ const optionalRequest = async <T>(path: string, token: string): Promise<T | unde
   }
 };
 
-const modalityFromApi: Record<string, Modality> = {
-  BEACH_TENNIS: 'Beach Tennis',
-  FUTEVOLEI: 'Futevôlei',
-  SOCIETY: 'Society',
-  TENIS: 'Tênis',
-  VOLEI: 'Vôlei',
-  BASQUETE: 'Basquete'
+export type ApiModality = {
+  id?: number | string;
+  code: string;
+  name: string;
+  active: boolean;
+  defaultPrice: number;
 };
 
-const modalityToApi: Record<Modality, string> = Object.fromEntries(
-  Object.entries(modalityFromApi).map(([key, value]) => [value, key])
-) as Record<Modality, string>;
+let modalityCatalogByCode = new Map<string, ModalityCatalogItem>();
+let modalityCodeByName = new Map<string, string>();
 
 const courtStatusFromApi: Record<string, CourtStatus> = {
   DISPONIVEL: 'Disponível',
@@ -169,20 +168,57 @@ const paymentStatusFromApi: Record<string, PaymentStatus> = {
   ESTORNADO: 'Cancelado'
 };
 
-const modalityAliases: Record<string, Modality> = {
-  'Beach Tennis': 'Beach Tennis',
-  'Futevôlei': 'Futevôlei',
-  Futevolei: 'Futevôlei',
-  Society: 'Society',
-  'Tênis': 'Tênis',
-  Tenis: 'Tênis',
-  'Vôlei': 'Vôlei',
-  Volei: 'Vôlei',
-  Basquete: 'Basquete'
+const normalizedModalityKey = (value: string) => value
+  .normalize('NFKC')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase('pt-BR');
+
+const humanizeModality = (value: string) => value
+  .replace(/[_-]+/g, ' ')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase('pt-BR')
+  .split(' ')
+  .map((word, index) => index > 0 && ['da', 'das', 'de', 'do', 'dos', 'e'].includes(word)
+    ? word
+    : word[0]?.toLocaleUpperCase('pt-BR') + word.slice(1))
+  .join(' ');
+
+export const setApiModalityCatalog = (items: ApiModality[]): ModalityCatalogItem[] => {
+  const mapped = items.map((item): ModalityCatalogItem => ({
+    id: item.id == null ? undefined : String(item.id),
+    code: String(item.code).trim().toUpperCase(),
+    name: String(item.name).normalize('NFKC').trim() as Modality,
+    active: item.active !== false,
+    defaultPrice: Number(item.defaultPrice ?? 0)
+  }));
+  modalityCatalogByCode = new Map(mapped.map((item) => [item.code, item]));
+  modalityCodeByName = new Map(mapped.map((item) => [normalizedModalityKey(item.name), item.code]));
+  return mapped;
 };
 
-const pickModality = (value?: string | null): Modality =>
-  modalityFromApi[value ?? ''] ?? modalityAliases[value ?? ''] ?? 'Beach Tennis';
+const pickModality = (value?: string | null): Modality => {
+  const raw = value?.normalize('NFKC').trim() ?? '';
+  if (!raw) return '';
+  const canonicalCode = raw.toUpperCase();
+  const byCode = modalityCatalogByCode.get(canonicalCode);
+  if (byCode) return byCode.name;
+  const codeByName = modalityCodeByName.get(normalizedModalityKey(raw));
+  if (codeByName) return modalityCatalogByCode.get(codeByName)?.name ?? humanizeModality(raw);
+  return humanizeModality(raw) as Modality;
+};
+
+const modalityToApiValue = (value: Modality): string => {
+  const raw = String(value ?? '').normalize('NFKC').trim();
+  const directCode = raw.toUpperCase();
+  if (modalityCatalogByCode.has(directCode)) return directCode;
+  const code = modalityCodeByName.get(normalizedModalityKey(raw));
+  if (code) return code;
+  throw new ApiRequestError('Selecione uma modalidade cadastrada no catálogo.', 400);
+};
 
 type ApiUser = Record<string, unknown> & {
   id: number | string;
@@ -542,7 +578,7 @@ export const mergeClientAvailability = (
         clientName: 'Reservado',
         courtId,
         courtName: court?.name ?? 'Quadra',
-        modality: court?.modality ?? 'Beach Tennis',
+        modality: court?.modality ?? '',
         date: String(slot.date ?? ''),
         startTime: String(slot.startTime ?? '').slice(0, 5),
         endTime: String(slot.endTime ?? '').slice(0, 5),
@@ -773,7 +809,7 @@ export const mapApiRankingEntry = (raw: ApiRankingEntry): RankingEntry => ({
 
 export const fetchRankingWithApi = async (period: 'WEEKLY' | 'MONTHLY' | 'ANNUAL', modality: Modality | 'Todas', token: string) => {
   const parameters = new URLSearchParams({ period });
-  if (modality !== 'Todas') parameters.set('modality', modalityToApi[modality]);
+  if (modality !== 'Todas') parameters.set('modality', modalityToApiValue(modality));
   const response = await request<ApiRankingEntry[]>(`/community/ranking?${parameters.toString()}`, {}, token);
   return response.map(mapApiRankingEntry);
 };
@@ -803,15 +839,15 @@ export const mapApiSettings = (raw: ApiSettings): Settings => {
     minimumReservationMinutes: Number(raw.minimumReservationMinutes ?? 60),
     maximumAdvanceDays: Number(raw.maximumAdvanceDays ?? 90),
     slotMinutes: Number(raw.slotMinutes ?? 60),
-    modalities: modalities.length ? modalities : (Object.values(modalityFromApi) as Modality[]),
-    defaultPrices: {
-      'Beach Tennis': defaultPrices['Beach Tennis'] ?? 0,
-      'Futevôlei': defaultPrices['Futevôlei'] ?? 0,
-      Society: defaultPrices.Society ?? 0,
-      'Tênis': defaultPrices['Tênis'] ?? 0,
-      'Vôlei': defaultPrices['Vôlei'] ?? 0,
-      Basquete: defaultPrices.Basquete ?? 0
-    },
+    modalities: modalities.length
+      ? modalities
+      : [...modalityCatalogByCode.values()].filter((item) => item.active).map((item) => item.name),
+    defaultPrices: Object.fromEntries(
+      [...modalityCatalogByCode.values()].map((item) => [
+        item.name,
+        defaultPrices[item.name] ?? item.defaultPrice
+      ])
+    ) as Record<Modality, number>,
     acceptPix: raw.acceptPix !== false,
     acceptCard: raw.acceptCard !== false,
     acceptCash: Boolean(raw.acceptCash),
@@ -829,16 +865,39 @@ export const mapApiSettings = (raw: ApiSettings): Settings => {
   };
 };
 
+export const fetchModalitiesWithApi = async (token: string, includeInactive = true) => {
+  const query = includeInactive ? '?includeInactive=true' : '';
+  return setApiModalityCatalog(await request<ApiModality[]>(`/modalities${query}`, {}, token));
+};
+
+export const createModalityWithApi = async (name: string, defaultPrice: number, token: string) => {
+  const created = await request<ApiModality>('/modalities', {
+    method: 'POST',
+    body: JSON.stringify({ name, defaultPrice })
+  }, token);
+  const existing = [...modalityCatalogByCode.values()].map((item): ApiModality => ({
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    active: item.active,
+    defaultPrice: item.defaultPrice
+  }));
+  return setApiModalityCatalog([...existing.filter((item) => item.code !== created.code), created])
+    .find((item) => item.code === created.code)!;
+};
+
 export const loginWithApi = async (email: string, password: string) => {
   const response = await request<{ token: string; user: ApiUser }>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password })
   });
+  await fetchModalitiesWithApi(response.token, true);
   return { token: response.token, user: mapApiUser(response.user) };
 };
 
 export const getCurrentUser = async (token: string) => {
   const response = await request<{ user: ApiUser }>('/auth/me', {}, token);
+  await fetchModalitiesWithApi(token, true);
   return mapApiUser(response.user);
 };
 
@@ -855,6 +914,7 @@ export const fetchCoreData = async (token: string, role: Role) => {
     return optionalRequest<ApiChampionship[]>('/community/championships', token);
   };
   const [
+    modalityCatalog,
     courts,
     reservations,
     availability,
@@ -876,6 +936,7 @@ export const fetchCoreData = async (token: string, role: Role) => {
     settings,
     dashboard
   ] = await Promise.all([
+    request<ApiModality[]>('/modalities?includeInactive=true', {}, token),
     request<ApiCourt[]>('/courts', {}, token),
     request<ApiReservation[]>(role === 'ADMIN' ? '/reservations' : '/reservations/my', {}, token),
     role === 'CLIENTE'
@@ -900,10 +961,12 @@ export const fetchCoreData = async (token: string, role: Role) => {
     role === 'ADMIN' ? optionalRequest<ApiAdminDashboard>('/dashboard/admin', token) : Promise.resolve(undefined)
   ]);
 
+  const mappedModalityCatalog = setApiModalityCatalog(modalityCatalog);
   const mappedCourts = courts.map(mapApiCourt);
   const mappedReservations = reservations.map(mapApiReservation);
 
   return {
+    modalityCatalog: mappedModalityCatalog,
     courts: mappedCourts,
     reservations: role === 'CLIENTE'
       ? mergeClientAvailability(mappedReservations, availability, mappedCourts)
@@ -981,7 +1044,7 @@ export const refundPaymentWithApi = async (paymentId: string, token: string): Pr
 
 const courtPayload = (court: Court) => ({
   name: court.name,
-  modality: modalityToApi[court.modality],
+  modality: modalityToApiValue(court.modality),
   description: court.description,
   pricePerHour: court.pricePerHour,
   playerCapacity: court.playerCapacity,
@@ -1012,12 +1075,12 @@ const userPayload = (user: User) => ({
   active: user.active,
   city: user.profile.city,
   bio: user.profile.bio,
-  favoriteModality: modalityToApi[user.profile.favoriteModality],
+  favoriteModality: modalityToApiValue(user.profile.favoriteModality),
   sportsLevel: user.profile.level,
   avatarUrl: /^(https?:|data:)/.test(user.profile.photo) ? user.profile.photo : null,
   phone: user.profile.phone || null,
   availability: user.profile.availability || null,
-  practicedSports: user.profile.sports,
+  practicedSports: user.profile.sports.map((item) => modalityToApiValue(item)),
   ...(user.temporaryPassword ? { password: user.temporaryPassword } : {})
 });
 
@@ -1063,7 +1126,7 @@ export const createCommunityPostWithApi = async (
   token: string
 ) => mapApiCommunityPost(await request<ApiCommunityPost>('/community/posts', {
   method: 'POST',
-  body: JSON.stringify({ content: input.content, type: input.type, modality: input.modality ? modalityToApi[input.modality] : null })
+  body: JSON.stringify({ content: input.content, type: input.type, modality: input.modality ? modalityToApiValue(input.modality) : null })
 }, token));
 
 export const updateCommunityPostWithApi = async (
@@ -1072,7 +1135,7 @@ export const updateCommunityPostWithApi = async (
   token: string
 ) => mapApiCommunityPost(await request<ApiCommunityPost>(`/community/posts/${postId}`, {
   method: 'PUT',
-  body: JSON.stringify({ content: input.content, type: input.type, modality: input.modality ? modalityToApi[input.modality] : null })
+  body: JSON.stringify({ content: input.content, type: input.type, modality: input.modality ? modalityToApiValue(input.modality) : null })
 }, token));
 
 export const deleteCommunityPostWithApi = (postId: string, token: string) =>
@@ -1123,7 +1186,7 @@ export const fetchChampionshipsWithApi = async (token: string, page = 0, size = 
 const championshipPayload = (item: Championship) => ({
   name: item.name,
   description: item.description,
-  modality: modalityToApi[item.modality],
+  modality: modalityToApiValue(item.modality),
   courtId: Number(item.courtId),
   location: item.location,
   city: item.city,
@@ -1180,8 +1243,8 @@ export const saveSportsProfileWithApi = async (profile: SportsProfile, token: st
     body: JSON.stringify({
       city: profile.city,
       regions: profile.regions,
-      primaryModality: modalityToApi[profile.primaryModality],
-      modalities: profile.modalities.map((item) => ({ modality: modalityToApi[item.modality], level: item.level })),
+      primaryModality: modalityToApiValue(profile.primaryModality),
+      modalities: profile.modalities.map((item) => ({ modality: modalityToApiValue(item.modality), level: item.level })),
       availabilities: profile.availabilities,
       objective: profile.objective,
       presentation: profile.presentation,
@@ -1220,8 +1283,8 @@ export const saveProfileWithApi = async (user: User, token: string) => mapApiUse
     avatarUrl: /^(https?:|data:)/.test(user.profile.photo) ? user.profile.photo : null,
     bio: user.profile.bio || null,
     sportsLevel: user.profile.level,
-    favoriteModality: modalityToApi[user.profile.favoriteModality],
-    practicedSports: user.profile.sports,
+    favoriteModality: modalityToApiValue(user.profile.favoriteModality),
+    practicedSports: user.profile.sports.map((item) => modalityToApiValue(item)),
     availability: user.profile.availability || null
   })
 }, token));
@@ -1254,7 +1317,7 @@ export const fetchPreferencesWithApi = async (token: string) =>
 export const savePreferencesWithApi = async (preferences: UserPreferences, token: string) =>
   mapApiPreferences(await request<Record<string, unknown>>('/profile/preferences', {
     method: 'PUT',
-    body: JSON.stringify({ ...preferences, favoriteModalities: preferences.favoriteModalities.map((item) => modalityToApi[item]) })
+    body: JSON.stringify({ ...preferences, favoriteModalities: preferences.favoriteModalities.map((item) => modalityToApiValue(item)) })
   }, token));
 
 const settingsPayload = (value: Settings) => ({
@@ -1272,8 +1335,8 @@ const settingsPayload = (value: Settings) => ({
   minimumReservationMinutes: value.minimumReservationMinutes,
   maximumAdvanceDays: value.maximumAdvanceDays,
   slotMinutes: value.slotMinutes,
-  modalities: value.modalities.map((item) => modalityToApi[item]),
-  defaultPrices: Object.fromEntries(Object.entries(value.defaultPrices).map(([key, price]) => [modalityToApi[key as Modality], price])),
+  modalities: value.modalities.map((item) => modalityToApiValue(item)),
+  defaultPrices: Object.fromEntries(Object.entries(value.defaultPrices).map(([key, price]) => [modalityToApiValue(key as Modality), price])),
   acceptPix: value.acceptPix,
   acceptCard: value.acceptCard,
   acceptCash: value.acceptCash,
@@ -1290,8 +1353,11 @@ const settingsPayload = (value: Settings) => ({
   publicRegistrationEnabled: value.publicRegistrationEnabled
 });
 
-export const saveSettingsWithApi = async (value: Settings, token: string) =>
-  mapApiSettings(await request<ApiSettings>('/settings', { method: 'PUT', body: JSON.stringify(settingsPayload(value)) }, token));
+export const saveSettingsWithApi = async (value: Settings, token: string) => {
+  const raw = await request<ApiSettings>('/settings', { method: 'PUT', body: JSON.stringify(settingsPayload(value)) }, token);
+  const modalityCatalog = await fetchModalitiesWithApi(token, true);
+  return { settings: mapApiSettings(raw), modalityCatalog };
+};
 
 export const registerWithApi = async (input: { name: string; email: string; password: string; confirmation: string; phone?: string }) => {
   const response = await request<{ token: string; user: ApiUser }>('/auth/register', {
@@ -1305,6 +1371,7 @@ export const registerWithApi = async (input: { name: string; email: string; pass
       acceptedTerms: true
     })
   });
+  await fetchModalitiesWithApi(response.token, true);
   return { token: response.token, user: mapApiUser(response.user) };
 };
 

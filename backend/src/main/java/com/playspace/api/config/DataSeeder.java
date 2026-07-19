@@ -15,7 +15,6 @@ import com.playspace.api.community.ReviewRepository;
 import com.playspace.api.court.Court;
 import com.playspace.api.court.CourtRepository;
 import com.playspace.api.court.CourtStatus;
-import com.playspace.api.court.Modality;
 import com.playspace.api.notification.NotificationRepository;
 import com.playspace.api.notification.NotificationService;
 import com.playspace.api.payment.Payment;
@@ -96,21 +95,21 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        var admin = user("Matheus Santos", "admin@playspace.com", "Admin@123", Role.ADMIN, "Sao Paulo", Modality.BEACH_TENNIS, "Administrador");
-        var cliente = user("Marina Costa", "cliente@playspace.com", "Cliente@123", Role.CLIENTE, "Sao Paulo", Modality.BEACH_TENNIS, "Intermediario");
-        var lucas = user("Lucas Alves", "lucas@playspace.com", "Cliente@123", Role.CLIENTE, "Campinas", Modality.SOCIETY, "Avancado");
-        var carlos = user("Carlos Nunes", "carlos@playspace.com", "Cliente@123", Role.CLIENTE, "Santos", Modality.FUTEVOLEI, "Intermediario");
-        var bia = user("Beatriz Lima", "bia@playspace.com", "Cliente@123", Role.CLIENTE, "Sao Paulo", Modality.TENIS, "Iniciante");
-        var joao = user("Joao Pereira", "joao@playspace.com", "Cliente@123", Role.CLIENTE, "Osasco", Modality.BASQUETE, "Avancado");
+        var admin = user("Matheus Santos", "admin@playspace.com", "Admin@123", Role.ADMIN, "Sao Paulo", "BEACH_TENNIS", "Administrador");
+        var cliente = user("Marina Costa", "cliente@playspace.com", "Cliente@123", Role.CLIENTE, "Sao Paulo", "BEACH_TENNIS", "Intermediario");
+        var lucas = user("Lucas Alves", "lucas@playspace.com", "Cliente@123", Role.CLIENTE, "Campinas", "SOCIETY", "Avancado");
+        var carlos = user("Carlos Nunes", "carlos@playspace.com", "Cliente@123", Role.CLIENTE, "Santos", "FUTEVOLEI", "Intermediario");
+        var bia = user("Beatriz Lima", "bia@playspace.com", "Cliente@123", Role.CLIENTE, "Sao Paulo", "TENIS", "Iniciante");
+        var joao = user("Joao Pereira", "joao@playspace.com", "Cliente@123", Role.CLIENTE, "Osasco", "BASQUETE", "Avancado");
         users.saveAll(List.of(admin, cliente, lucas, carlos, bia, joao));
 
         var courtList = List.of(
-                court("Quadra Aurora", Modality.BEACH_TENNIS, "Areia premium, iluminação profissional e arquibancada compacta.", 120, 4, CourtStatus.DISPONIVEL, "Setor A", true, false, 4.9),
-                court("Quadra Pulse", Modality.FUTEVOLEI, "Espaco aberto com rede oficial, piso drenante e visual de clube.", 110, 6, CourtStatus.DISPONIVEL, "Setor B", true, false, 4.7),
-                court("Arena Summit", Modality.SOCIETY, "Campo society coberto com grama sintetica nova e placar digital.", 180, 12, CourtStatus.DISPONIVEL, "Setor C", true, true, 4.8),
-                court("Studio Tênis", Modality.TENIS, "Quadra rápida com marcação profissional e área técnica.", 115, 4, CourtStatus.DISPONIVEL, "Setor D", true, true, 4.6),
-                court("Hangar Vôlei", Modality.VOLEI, "Quadra coberta com pé-direito alto, piso modular e ventilação.", 95, 12, CourtStatus.EM_MANUTENCAO, "Setor E", true, true, 4.4),
-                court("Court Neon", Modality.BASQUETE, "Meia quadra urbana para treinos, duelos e eventos noturnos.", 90, 10, CourtStatus.DISPONIVEL, "Setor F", true, false, 4.5)
+                court("Quadra Aurora", "BEACH_TENNIS", "Areia premium, iluminação profissional e arquibancada compacta.", 120, 4, CourtStatus.DISPONIVEL, "Setor A", true, false, 4.9),
+                court("Quadra Pulse", "FUTEVOLEI", "Espaco aberto com rede oficial, piso drenante e visual de clube.", 110, 6, CourtStatus.DISPONIVEL, "Setor B", true, false, 4.7),
+                court("Arena Summit", "SOCIETY", "Campo society coberto com grama sintetica nova e placar digital.", 180, 12, CourtStatus.DISPONIVEL, "Setor C", true, true, 4.8),
+                court("Studio Tênis", "TENIS", "Quadra rápida com marcação profissional e área técnica.", 115, 4, CourtStatus.DISPONIVEL, "Setor D", true, true, 4.6),
+                court("Hangar Vôlei", "VOLEI", "Quadra coberta com pé-direito alto, piso modular e ventilação.", 95, 12, CourtStatus.EM_MANUTENCAO, "Setor E", true, true, 4.4),
+                court("Court Neon", "BASQUETE", "Meia quadra urbana para treinos, duelos e eventos noturnos.", 90, 10, CourtStatus.DISPONIVEL, "Setor F", true, false, 4.5)
         );
         courts.saveAll(courtList);
 
@@ -146,7 +145,7 @@ public class DataSeeder implements CommandLineRunner {
                 .orElse(reservations.findAll().get(0)));
     }
 
-    private AppUser user(String name, String email, String password, Role role, String city, Modality favoriteModality, String level) {
+    private AppUser user(String name, String email, String password, Role role, String city, String favoriteModality, String level) {
         var user = new AppUser();
         user.setName(name);
         user.setEmail(email);
@@ -161,12 +160,12 @@ public class DataSeeder implements CommandLineRunner {
         user.setMatchesPlayed(role == Role.ADMIN ? 0 : 18 + Math.abs(name.hashCode() % 35));
         user.setHoursOnCourt(role == Role.ADMIN ? 0 : 24 + Math.abs(name.hashCode() % 80));
         user.setAttendanceRate(role == Role.ADMIN ? 100 : 86 + Math.abs(name.hashCode() % 13));
-        user.setPracticedSports(Set.of("Beach Tennis", "Society", "Tênis"));
+        user.setPracticedSports(Set.of("BEACH_TENNIS", "SOCIETY", "TENIS"));
         user.setAchievements(Set.of("Primeira Reserva", "Sequencia Ativa"));
         return user;
     }
 
-    private Court court(String name, Modality modality, String description, int price, int capacity, CourtStatus status, String location, boolean lighting, boolean covered, double rating) {
+    private Court court(String name, String modality, String description, int price, int capacity, CourtStatus status, String location, boolean lighting, boolean covered, double rating) {
         var court = new Court();
         court.setName(name);
         court.setModality(modality);
@@ -178,7 +177,7 @@ public class DataSeeder implements CommandLineRunner {
         court.setLighting(lighting);
         court.setCovered(covered);
         court.setRating(rating);
-        court.setImageUrl("/assets/court-" + modality.name().toLowerCase() + ".jpg");
+        court.setImageUrl("/assets/court-" + modality.toLowerCase() + ".jpg");
         return court;
     }
 
@@ -309,7 +308,7 @@ public class DataSeeder implements CommandLineRunner {
     private void seedChampionships() {
         var bt = new Championship();
         bt.setName("Open PlaySpace Beach");
-        bt.setModality(Modality.BEACH_TENNIS);
+        bt.setModality("BEACH_TENNIS");
         bt.setStartDate(LocalDate.now().plusDays(18));
         bt.setCategories("Duplas B, C e Iniciante");
         bt.setPrize("Troféu, creditos PlaySpace e brindes");
@@ -319,7 +318,7 @@ public class DataSeeder implements CommandLineRunner {
 
         var society = new Championship();
         society.setName("Liga Society Night");
-        society.setModality(Modality.SOCIETY);
+        society.setModality("SOCIETY");
         society.setStartDate(LocalDate.now().plusDays(32));
         society.setCategories("Masculino e misto");
         society.setPrize("Mensalidade premium por 30 dias");

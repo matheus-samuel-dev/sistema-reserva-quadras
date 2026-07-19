@@ -1,6 +1,5 @@
 package com.playspace.api.user;
 
-import com.playspace.api.court.Modality;
 import com.playspace.api.reservation.Reservation;
 import com.playspace.api.reservation.ReservationStatus;
 import java.math.BigDecimal;
@@ -11,7 +10,7 @@ public record ReservationHistoryResponse(
         Long id,
         String code,
         String court,
-        Modality modality,
+        String modality,
         LocalDate date,
         LocalTime startTime,
         LocalTime endTime,

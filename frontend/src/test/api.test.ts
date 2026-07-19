@@ -4,7 +4,9 @@ import {
   enrollInChampionshipWithApi,
   fetchAvailabilityRangeWithApi,
   fetchCoreData,
-  likePostWithApi
+  likePostWithApi,
+  mapApiReservation,
+  setApiModalityCatalog
 } from '../lib/api';
 
 const jsonResponse = (payload: unknown) => ({
@@ -15,14 +17,26 @@ const jsonResponse = (payload: unknown) => ({
   text: async () => JSON.stringify(payload)
 }) as Response;
 
+const legacyModalities = [
+  { id: 1, code: 'BEACH_TENNIS', name: 'Beach Tennis', active: true, defaultPrice: 120 },
+  { id: 2, code: 'FUTEVOLEI', name: 'Futevôlei', active: true, defaultPrice: 110 },
+  { id: 3, code: 'SOCIETY', name: 'Society', active: true, defaultPrice: 180 },
+  { id: 4, code: 'TENIS', name: 'Tênis', active: true, defaultPrice: 115 },
+  { id: 5, code: 'VOLEI', name: 'Vôlei', active: true, defaultPrice: 95 },
+  { id: 6, code: 'BASQUETE', name: 'Basquete', active: true, defaultPrice: 90 }
+];
+
 describe('integracao da disponibilidade da agenda', () => {
   afterEach(() => {
+    setApiModalityCatalog([]);
     vi.unstubAllGlobals();
   });
 
   it('mescla slots ocupados sem duplicar reservas proprias ou expor dados privados', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
       const url = String(input);
+
+      if (url.endsWith('/modalities?includeInactive=true')) return jsonResponse(legacyModalities);
 
       if (url.endsWith('/courts')) {
         return jsonResponse([{
@@ -107,14 +121,41 @@ describe('integracao da disponibilidade da agenda', () => {
   });
 });
 
+describe('normalização de modalidades da API', () => {
+  it('preserva modalidades futuras em vez de convertê-las para Beach Tennis', () => {
+    setApiModalityCatalog([
+      ...legacyModalities,
+      { id: 7, code: 'VOLEI_DE_AREIA', name: 'Vôlei de Areia', active: true, defaultPrice: 130 },
+      { id: 8, code: 'PICKLEBALL', name: 'Pickleball', active: true, defaultPrice: 100 }
+    ]);
+    const base = {
+      id: 99,
+      code: 'RES-0099',
+      client: { id: 7, name: 'Cliente', email: 'cliente@teste.com', role: 'CLIENTE', active: true },
+      court: { id: 12, name: 'Arena de Areia', modality: 'VOLEI_DE_AREIA' },
+      modality: 'VOLEI_DE_AREIA',
+      date: '2026-07-20',
+      startTime: '18:00:00',
+      endTime: '19:00:00',
+      status: 'CONFIRMADA',
+      totalValue: 120
+    } as Parameters<typeof mapApiReservation>[0];
+
+    expect(mapApiReservation(base).modality).toBe('Vôlei de Areia');
+    expect(mapApiReservation({ ...base, modality: 'PICKLEBALL' }).modality).toBe('Pickleball');
+  });
+});
+
 describe('integracao dos modulos API-first', () => {
   afterEach(() => {
+    setApiModalityCatalog([]);
     vi.unstubAllGlobals();
   });
 
   it('mapeia comunidade, conquistas, avaliacoes, ranking e configuracoes do backend', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.endsWith('/modalities?includeInactive=true')) return jsonResponse(legacyModalities);
       if (url.endsWith('/courts') || url.endsWith('/reservations') || url.endsWith('/payments') || url.endsWith('/notifications') || url.endsWith('/users')) {
         return jsonResponse([]);
       }

@@ -1,9 +1,17 @@
 export type Role = 'ADMIN' | 'CLIENTE';
-export type Modality = 'Beach Tennis' | 'Futevôlei' | 'Society' | 'Tênis' | 'Vôlei' | 'Basquete';
+export type Modality = string;
 export type CourtStatus = 'Disponível' | 'Em manutenção' | 'Indisponível';
 export type ReservationStatus = 'Pendente' | 'Confirmada' | 'Em andamento' | 'Concluída' | 'Cancelada';
 export type PaymentMethod = 'PIX' | 'Cartão de Crédito' | 'Cartão de Débito';
 export type PaymentStatus = 'Pendente' | 'Aprovado' | 'Recusado' | 'Cancelado';
+
+export interface ModalityCatalogItem {
+  id?: string;
+  code: string;
+  name: Modality;
+  active: boolean;
+  defaultPrice: number;
+}
 
 export interface UserProfile {
   photo: string;
@@ -319,6 +327,7 @@ export interface Settings {
 }
 
 export interface PlaySpaceState {
+  modalityCatalog: ModalityCatalogItem[];
   users: User[];
   courts: Court[];
   reservations: Reservation[];

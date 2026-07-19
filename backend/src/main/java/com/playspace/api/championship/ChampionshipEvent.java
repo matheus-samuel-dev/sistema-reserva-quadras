@@ -2,7 +2,6 @@ package com.playspace.api.championship;
 
 import com.playspace.api.common.AuditableEntity;
 import com.playspace.api.court.Court;
-import com.playspace.api.court.Modality;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -30,9 +29,8 @@ public class ChampionshipEvent extends AuditableEntity {
     @Column(nullable = false, length = 1600)
     private String description;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
-    private Modality modality;
+    private String modality;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "court_id", nullable = false)
@@ -84,8 +82,8 @@ public class ChampionshipEvent extends AuditableEntity {
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
-    public Modality getModality() { return modality; }
-    public void setModality(Modality modality) { this.modality = modality; }
+    public String getModality() { return modality; }
+    public void setModality(String modality) { this.modality = modality; }
     public Court getCourt() { return court; }
     public void setCourt(Court court) { this.court = court; }
     public String getLocation() { return location; }

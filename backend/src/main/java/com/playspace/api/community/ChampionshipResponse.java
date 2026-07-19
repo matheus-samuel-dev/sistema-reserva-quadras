@@ -1,6 +1,5 @@
 package com.playspace.api.community;
 
-import com.playspace.api.court.Modality;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
@@ -9,7 +8,7 @@ import java.util.List;
 public record ChampionshipResponse(
         Long id,
         String name,
-        Modality modality,
+        String modality,
         LocalDate startDate,
         String categories,
         String prize,

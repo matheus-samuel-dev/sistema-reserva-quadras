@@ -1,6 +1,5 @@
 package com.playspace.api.championship;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -12,7 +11,7 @@ import java.time.LocalDate;
 public record ChampionshipRequest(
         @NotBlank @Size(max = 255) String name,
         @NotBlank @Size(max = 1600) String description,
-        @NotNull Modality modality,
+        @NotBlank @Size(max = 40) String modality,
         @NotNull Long courtId,
         @NotBlank @Size(max = 255) String location,
         @NotBlank @Size(max = 120) String city,

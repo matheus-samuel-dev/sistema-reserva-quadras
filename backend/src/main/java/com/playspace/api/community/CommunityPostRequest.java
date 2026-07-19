@@ -1,6 +1,5 @@
 package com.playspace.api.community;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -10,6 +9,7 @@ public record CommunityPostRequest(
         String content,
         @Size(max = 255, message = "O tipo deve ter no máximo 255 caracteres.")
         String type,
-        Modality modality
+        @Size(max = 40, message = "A modalidade deve ter no máximo 40 caracteres.")
+        String modality
 ) {
 }

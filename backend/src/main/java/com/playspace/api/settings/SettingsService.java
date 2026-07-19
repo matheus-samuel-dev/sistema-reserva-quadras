@@ -2,17 +2,12 @@ package com.playspace.api.settings;
 
 import com.playspace.api.common.AuditService;
 import com.playspace.api.common.BusinessException;
-import com.playspace.api.court.Modality;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.security.CurrentUserService;
-import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.Arrays;
-import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +17,14 @@ public class SettingsService {
     private final PlatformSettingsRepository settings;
     private final CurrentUserService currentUser;
     private final AuditService audit;
+    private final SportModalityService modalities;
 
-    public SettingsService(PlatformSettingsRepository settings, CurrentUserService currentUser, AuditService audit) {
+    public SettingsService(PlatformSettingsRepository settings, CurrentUserService currentUser, AuditService audit,
+                           SportModalityService modalities) {
         this.settings = settings;
         this.currentUser = currentUser;
         this.audit = audit;
+        this.modalities = modalities;
     }
 
     @Transactional(readOnly = true)
@@ -52,14 +50,7 @@ public class SettingsService {
         entity.setMinimumReservationMinutes(request.minimumReservationMinutes());
         entity.setMaximumAdvanceDays(request.maximumAdvanceDays());
         entity.setSlotMinutes(request.slotMinutes());
-        entity.setEnabledModalities(request.modalities().stream().map(Enum::name).sorted().collect(Collectors.joining(",")));
-        var prices = normalizePrices(request.defaultPrices());
-        entity.setBeachTennisPrice(prices.get(Modality.BEACH_TENNIS));
-        entity.setFutevoleiPrice(prices.get(Modality.FUTEVOLEI));
-        entity.setSocietyPrice(prices.get(Modality.SOCIETY));
-        entity.setTenisPrice(prices.get(Modality.TENIS));
-        entity.setVoleiPrice(prices.get(Modality.VOLEI));
-        entity.setBasquetePrice(prices.get(Modality.BASQUETE));
+        modalities.updateConfiguration(request.modalities(), request.defaultPrices());
         entity.setAcceptPix(request.acceptPix());
         entity.setAcceptCard(request.acceptCard());
         entity.setAcceptCash(request.acceptCash());
@@ -89,32 +80,6 @@ public class SettingsService {
         if (request.acceptPix() && (request.pixKey() == null || request.pixKey().isBlank())) {
             throw new BusinessException("Informe a chave PIX quando o PIX estiver ativo.");
         }
-        var prices = normalizePrices(request.defaultPrices());
-        for (var modality : request.modalities()) {
-            if (prices.get(modality) == null) {
-                throw new BusinessException("Informe o preco padrao de todas as modalidades ativas.");
-            }
-        }
-    }
-
-    private EnumMap<Modality, BigDecimal> normalizePrices(Map<String, BigDecimal> source) {
-        var result = new EnumMap<Modality, BigDecimal>(Modality.class);
-        source.forEach((key, value) -> result.put(parseModality(key), value));
-        return result;
-    }
-
-    private Modality parseModality(String value) {
-        var normalized = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "").toUpperCase(Locale.ROOT).replaceAll("[^A-Z]", "");
-        return switch (normalized) {
-            case "BEACHTENNIS" -> Modality.BEACH_TENNIS;
-            case "FUTEVOLEI" -> Modality.FUTEVOLEI;
-            case "SOCIETY" -> Modality.SOCIETY;
-            case "TENIS" -> Modality.TENIS;
-            case "VOLEI" -> Modality.VOLEI;
-            case "BASQUETE" -> Modality.BASQUETE;
-            default -> throw new BusinessException("Modalidade de preco invalida: " + value + ".");
-        };
     }
 
     private PlatformSettings required() {
@@ -122,16 +87,8 @@ public class SettingsService {
     }
 
     private SettingsResponse response(PlatformSettings entity) {
-        var modalities = Arrays.stream(entity.getEnabledModalities().split(","))
-                .filter(value -> !value.isBlank()).map(Modality::valueOf)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        var prices = new LinkedHashMap<String, BigDecimal>();
-        prices.put(Modality.BEACH_TENNIS.name(), entity.getBeachTennisPrice());
-        prices.put(Modality.FUTEVOLEI.name(), entity.getFutevoleiPrice());
-        prices.put(Modality.SOCIETY.name(), entity.getSocietyPrice());
-        prices.put(Modality.TENIS.name(), entity.getTenisPrice());
-        prices.put(Modality.VOLEI.name(), entity.getVoleiPrice());
-        prices.put(Modality.BASQUETE.name(), entity.getBasquetePrice());
+        var activeModalities = modalities.activeCodes();
+        var prices = modalities.pricesByCode();
         var days = Arrays.stream(entity.getOperatingDays().split(","))
                 .filter(value -> !value.isBlank()).collect(Collectors.toCollection(LinkedHashSet::new));
         return new SettingsResponse(
@@ -139,7 +96,7 @@ public class SettingsService {
                 entity.getCompanyPhone(), entity.getAddress(), entity.getTimezone(), entity.getOpeningTime(),
                 entity.getClosingTime(), display(entity.getOpeningTime()) + " - " + display(entity.getClosingTime()), days,
                 entity.getCancellationRuleHours(), entity.getMinimumReservationMinutes(), entity.getMaximumAdvanceDays(),
-                entity.getSlotMinutes(), modalities, prices, entity.isAcceptPix(), entity.isAcceptCard(), entity.isAcceptCash(),
+                entity.getSlotMinutes(), activeModalities, prices, entity.isAcceptPix(), entity.isAcceptCard(), entity.isAcceptCash(),
                 entity.getPixKey(), entity.isEmailNotifications(), entity.isBrowserNotifications(),
                 entity.getReservationReminderHours(), entity.getPrimaryColor(), entity.getLogoUrl(), entity.getDefaultTheme(),
                 entity.getMinimumPasswordLength(), entity.getSessionMinutes(), entity.isRequireStrongPassword(),

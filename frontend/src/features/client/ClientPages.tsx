@@ -41,7 +41,6 @@ import { fetchRankingWithApi, tokenFromStorage } from '../../lib/api';
 import type { Modality, PartnerAd, Payment, PaymentStatus, RankingEntry, Reservation, ReservationFormInput, Review } from '../../lib/types';
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
 const chartColors = ['var(--primary)', 'var(--info)', '#8B5CF6', 'var(--warning)', 'var(--danger)'];
 const chartTooltip = { background: 'var(--tooltip-bg)', color: 'var(--tooltip-text)', border: '1px solid var(--border-strong)', borderRadius: 10, boxShadow: 'var(--shadow-panel)' };
 const iconMap = { Medal, Volleyball, Flame, Zap, Gem, Moon, Trophy, Award };
@@ -370,6 +369,7 @@ export function ClientCourtsPage() {
 
 export function ClientAgendaPage() {
   const { state, dataSource, ensureAvailabilityRange } = useAppData();
+  const filterModalities = state.modalityCatalog.map((item) => item.name);
   const [selected, setSelected] = useState<Reservation | null>(null);
   const [creating, setCreating] = useState(false);
   const [reservationDraft, setReservationDraft] = useState<Partial<ReservationFormInput>>({});
@@ -380,7 +380,7 @@ export function ClientAgendaPage() {
   const agendaReservations = state.reservations.map((reservation) => reservation.clientId === user?.id ? reservation : { ...reservation, code: 'Horário ocupado', clientName: 'Reservado', notes: undefined, totalValue: 0, players: 0, history: ['Horário indisponível'] });
   return (
     <>
-      <ClientHeader title="Agenda" subtitle="Veja horários, filtre quadras e encontre janelas livres sem expor dados de outros jogadores." action={<div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold text-muted">Quadra<select className="form-control min-w-44 py-2 text-sm" value={courtFilter} onChange={(event) => setCourtFilter(event.target.value)}><option value="Todas">Todas as quadras</option>{state.courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-muted">Modalidade<select className="form-control min-w-44 py-2 text-sm" value={modalityFilter} onChange={(event) => setModalityFilter(event.target.value as Modality | 'Todas')}><option value="Todas">Todas as modalidades</option>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label></div>} />
+      <ClientHeader title="Agenda" subtitle="Veja horários, filtre quadras e encontre janelas livres sem expor dados de outros jogadores." action={<div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold text-muted">Quadra<select className="form-control min-w-44 py-2 text-sm" value={courtFilter} onChange={(event) => setCourtFilter(event.target.value)}><option value="Todas">Todas as quadras</option>{state.courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-muted">Modalidade<select className="form-control min-w-44 py-2 text-sm" value={modalityFilter} onChange={(event) => setModalityFilter(event.target.value as Modality | 'Todas')}><option value="Todas">Todas as modalidades</option>{filterModalities.map((item) => <option key={item}>{item}</option>)}</select></label></div>} />
       <WeeklyCalendar reservations={agendaReservations} courtFilter={courtFilter} modalityFilter={modalityFilter} onReservationClick={(reservation) => reservation.clientId === user?.id ? setSelected(reservation) : setToast('Este horário já está ocupado. Os dados do outro jogador permanecem privados.')} onNewReservation={(initialValues) => { setReservationDraft(initialValues ?? {}); setCreating(true); }} onVisibleRangeChange={dataSource === 'api' ? ensureAvailabilityRange : undefined} />
       <Modal title="Reserva selecionada" open={Boolean(selected)} onClose={() => setSelected(null)}>{selected && <ReservationCard reservation={selected} />}</Modal>
       <Modal title="Nova reserva" open={creating} onClose={() => setCreating(false)}>{user && <ReservationForm actor={user} initialValues={reservationDraft} onCreated={() => { setCreating(false); setReservationDraft({}); }} />}</Modal>
@@ -482,6 +482,7 @@ export function ClientProfilePage() {
 export function ClientStatsPage() {
   const { user } = useAuth();
   const { state } = useAppData();
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
   const myReservations = state.reservations.filter((reservation) => reservation.clientId === user?.id);
   const myReservationIds = new Set(myReservations.map((item) => item.id));
   const monthly = Array.from({ length: 6 }, (_, reverseIndex) => {
@@ -489,7 +490,9 @@ export function ClientStatsPage() {
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     return { month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''), reservas: myReservations.filter((item) => item.date.startsWith(key) && item.status !== 'Cancelada').length, gasto: state.payments.filter((payment) => myReservationIds.has(payment.reservationId) && payment.status === 'Aprovado' && (payment.paidAt ?? '').startsWith(key)).reduce((sum, payment) => sum + payment.amount, 0) };
   });
-  const byModality = modalities.map((sport) => ({ name: sport, value: myReservations.filter((item) => item.modality === sport && item.status !== 'Cancelada').length })).filter((item) => item.value > 0);
+  const modalityCounts = new Map<Modality, number>(activeModalities.map((name) => [name, 0] as [Modality, number]));
+  myReservations.filter((item) => item.status !== 'Cancelada').forEach((item) => modalityCounts.set(item.modality, (modalityCounts.get(item.modality) ?? 0) + 1));
+  const byModality = [...modalityCounts].map(([name, value]) => ({ name, value })).filter((item) => item.value > 0).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'pt-BR'));
   const monthlySpend = monthly[monthly.length - 1]?.gasto ?? 0;
   return (
     <>
@@ -561,6 +564,7 @@ export function ClientCommunityPage() {
 
 export function ClientRankingPage() {
   const { state, dataSource } = useAppData();
+  const filterModalities = state.modalityCatalog.map((item) => item.name);
   const [period, setPeriod] = useState<'Semanal' | 'Mensal' | 'Anual'>('Mensal');
   const [modality, setModality] = useState<Modality | 'Todas'>('Todas');
   const [remoteRanking, setRemoteRanking] = useState<RankingEntry[] | null>(null);
@@ -598,7 +602,7 @@ export function ClientRankingPage() {
   return (
     <>
       <ClientHeader title="Ranking da comunidade" subtitle="Pontuação calculada por jogos, horas e conquistas, com filtros reais de período e modalidade." />
-      <div className="mb-4 flex flex-wrap items-end gap-3"><div className="flex flex-wrap gap-2">{(['Semanal', 'Mensal', 'Anual'] as const).map((item) => <button key={item} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-bold ${period === item ? 'border-neon bg-neon/10 text-neon' : 'border-line text-muted'}`} onClick={() => setPeriod(item)} aria-pressed={period === item}>{item}</button>)}</div><label className="grid min-w-48 gap-2 text-sm font-bold">Modalidade<select className="form-control" value={modality} onChange={(event) => setModality(event.target.value as Modality | 'Todas')}><option>Todas</option>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label></div>
+      <div className="mb-4 flex flex-wrap items-end gap-3"><div className="flex flex-wrap gap-2">{(['Semanal', 'Mensal', 'Anual'] as const).map((item) => <button key={item} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-bold ${period === item ? 'border-neon bg-neon/10 text-neon' : 'border-line text-muted'}`} onClick={() => setPeriod(item)} aria-pressed={period === item}>{item}</button>)}</div><label className="grid min-w-48 gap-2 text-sm font-bold">Modalidade<select className="form-control" value={modality} onChange={(event) => setModality(event.target.value as Modality | 'Todas')}><option>Todas</option>{filterModalities.map((item) => <option key={item}>{item}</option>)}</select></label></div>
       {loading && <p className="mb-4 rounded-lg border border-line p-3 text-sm text-muted" role="status">Atualizando ranking...</p>}
       {error && <p className="mb-4 rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
       <div className="grid gap-3">
@@ -623,11 +627,13 @@ export function ClientRankingPage() {
 export function ClientPartnersPage() {
   const { user } = useAuth();
   const { state, addPartnerAd } = useAppData();
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [query, setQuery] = useState('');
   const [interested, setInterested] = useState<Set<string>>(() => new Set());
-  const [form, setForm] = useState<Omit<PartnerAd, 'id'>>({ playerId: user?.id ?? '', playerName: user?.name ?? '', modality: user?.profile.favoriteModality ?? 'Beach Tennis', level: user?.profile.level ?? 'Intermediário', city: user?.profile.city ?? '', availability: 'Ter e Qui, 18:00 - 21:00', notes: '' });
+  const [form, setForm] = useState<Omit<PartnerAd, 'id'>>({ playerId: user?.id ?? '', playerName: user?.name ?? '', modality: user?.profile.favoriteModality ?? activeModalities[0] ?? ('' as Modality), level: user?.profile.level ?? 'Intermediário', city: user?.profile.city ?? '', availability: 'Ter e Qui, 18:00 - 21:00', notes: '' });
+  const modalityOptions = form.modality && !activeModalities.includes(form.modality) ? [form.modality, ...activeModalities] : activeModalities;
   const filtered = state.partnerAds.filter((ad) => `${ad.playerName} ${ad.modality} ${ad.level} ${ad.city}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
@@ -649,7 +655,7 @@ export function ClientPartnersPage() {
       {filtered.length === 0 && <EmptyState title="Nenhum parceiro encontrado" description="Ajuste a busca ou simule um anúncio local para esta sessão." actionLabel="Simular anúncio" onAction={() => setOpen(true)} />}
       <Modal title="Simular anúncio" open={open} onClose={() => setOpen(false)}>
         <form className="grid gap-4" onSubmit={(event: FormEvent) => { event.preventDefault(); addPartnerAd(form); setOpen(false); setToast('Anúncio demonstrativo adicionado somente nesta sessão.'); }}>
-          <label className="grid gap-2 text-sm font-semibold">Modalidade<select className="form-control" value={form.modality} onChange={(event) => setForm((current) => ({ ...current, modality: event.target.value as Modality }))}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="grid gap-2 text-sm font-semibold">Modalidade<select className="form-control" value={form.modality} onChange={(event) => setForm((current) => ({ ...current, modality: event.target.value as Modality }))} required>{modalityOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label className="grid gap-2 text-sm font-semibold">Disponibilidade<input className="form-control" value={form.availability} onChange={(event) => setForm((current) => ({ ...current, availability: event.target.value }))} required /></label>
           <label className="grid gap-2 text-sm font-semibold">Descrição<textarea className="form-control min-h-24" placeholder="Conte como você gosta de jogar" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} /></label>
           <button className="neon-button rounded-lg px-5 py-3 font-black">Adicionar simulação</button>

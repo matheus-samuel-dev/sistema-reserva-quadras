@@ -9,7 +9,6 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Championship, Modality } from '../../lib/types';
 
-const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
 const statuses = ['RASCUNHO', 'INSCRICOES_ABERTAS', 'INSCRICOES_ENCERRADAS', 'EM_ANDAMENTO', 'CONCLUIDO', 'CANCELADO'] as const;
 const statusLabels: Record<string, string> = {
   RASCUNHO: 'Rascunho', INSCRICOES_ABERTAS: 'Inscrições abertas', INSCRICOES_ENCERRADAS: 'Inscrições encerradas',
@@ -31,8 +30,8 @@ const formatDate = (value?: string) => value ? new Intl.DateTimeFormat('pt-BR', 
 const today = () => new Date().toISOString().slice(0, 10);
 const datePlus = (days: number) => { const value = new Date(); value.setDate(value.getDate() + days); return value.toISOString().slice(0, 10); };
 
-const blankChampionship = (courtId = ''): Championship => ({
-  id: '', name: '', description: '', modality: 'Beach Tennis', courtId, courtName: '', location: '', city: 'São Paulo',
+const blankChampionship = (modality: Modality, courtId = ''): Championship => ({
+  id: '', name: '', description: '', modality, courtId, courtName: '', location: '', city: 'São Paulo',
   startDate: datePlus(30), endDate: datePlus(31), registrationDeadline: datePlus(20), maxParticipants: 16,
   enrolledParticipants: 0, availableSpots: 16, format: 'Fase de grupos e eliminatórias', categories: 'Categoria aberta',
   regulation: '', prize: '', registrationFee: 0, status: 'RASCUNHO', bracket: []
@@ -53,6 +52,9 @@ export function ChampionshipsPage() {
     removeChampionship,
     saveChampionship
   } = useAppData();
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
+  const filterModalities = state.modalityCatalog.map((item) => item.name);
+  const firstActiveModality = activeModalities[0] ?? state.courts[0]?.modality ?? ('' as Modality);
   const [query, setQuery] = useState('');
   const [modality, setModality] = useState('');
   const [status, setStatus] = useState('');
@@ -60,7 +62,7 @@ export function ChampionshipsPage() {
   const [fromDate, setFromDate] = useState('');
   const [detailId, setDetailId] = useState('');
   const [formOpen, setFormOpen] = useState(false);
-  const [draft, setDraft] = useState<Championship>(() => blankChampionship(state.courts[0]?.id));
+  const [draft, setDraft] = useState<Championship>(() => blankChampionship(firstActiveModality, state.courts[0]?.id));
   const [deleteId, setDeleteId] = useState('');
   const [cancelEnrollmentId, setCancelEnrollmentId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +72,7 @@ export function ChampionshipsPage() {
   const isAdmin = user.role === 'ADMIN';
   const detail = state.championships.find((item) => item.id === detailId);
   const participants = state.championshipEnrollments.filter((item) => item.championshipId === detailId && item.status === 'ATIVA');
+  const modalityOptions = draft.modality && !activeModalities.includes(draft.modality) ? [draft.modality, ...activeModalities] : activeModalities;
 
   const filtered = useMemo(() => state.championships
     .filter((item) => isAdmin || item.status !== 'RASCUNHO')
@@ -81,8 +84,9 @@ export function ChampionshipsPage() {
     .sort((a, b) => a.startDate.localeCompare(b.startDate)), [city, fromDate, isAdmin, modality, query, state.championships, status]);
 
   const openCreate = () => {
-    const firstCourt = state.courts.find((court) => court.modality === 'Beach Tennis') ?? state.courts[0];
-    setDraft({ ...blankChampionship(firstCourt?.id), courtName: firstCourt?.name ?? '', location: firstCourt?.name ?? '' });
+    const selectedModality = activeModalities[0] ?? state.courts[0]?.modality ?? ('' as Modality);
+    const firstCourt = state.courts.find((court) => court.modality === selectedModality) ?? state.courts[0];
+    setDraft({ ...blankChampionship(selectedModality, firstCourt?.id), courtName: firstCourt?.name ?? '', location: firstCourt?.name ?? '' });
     setError(''); setFormOpen(true);
   };
   const openEdit = (item: Championship) => { setDraft({ ...item, bracket: [...item.bracket] }); setError(''); setFormOpen(true); };
@@ -128,7 +132,7 @@ export function ChampionshipsPage() {
     <section className="glass-panel mb-4 rounded-lg p-4" aria-label="Filtros de campeonatos">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <label className="relative"><span className="sr-only">Buscar</span><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted" /><input className="app-input w-full pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome ou local" /></label>
-        <select className="app-input" aria-label="Filtrar por modalidade" value={modality} onChange={(event) => setModality(event.target.value)}><option value="">Todas as modalidades</option>{modalities.map((item) => <option key={item}>{item}</option>)}</select>
+        <select className="app-input" aria-label="Filtrar por modalidade" value={modality} onChange={(event) => setModality(event.target.value)}><option value="">Todas as modalidades</option>{filterModalities.map((item) => <option key={item}>{item}</option>)}</select>
         <select className="app-input" aria-label="Filtrar por status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Todos os status</option>{statuses.filter((item) => isAdmin || item !== 'RASCUNHO').map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}</select>
         <input className="app-input" aria-label="Filtrar por cidade" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Cidade" />
         <label className="grid gap-1 text-xs font-bold text-muted">A partir de<input className="app-input text-[var(--text)]" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
@@ -154,7 +158,7 @@ export function ChampionshipsPage() {
     <Modal title={draft.id ? 'Editar campeonato' : 'Novo campeonato'} open={formOpen} onClose={() => setFormOpen(false)} maxWidth="max-w-4xl">
       <form className="grid gap-4" onSubmit={submit}>
         <div className="grid gap-4 md:grid-cols-2"><label className="grid gap-2 text-sm font-bold md:col-span-2">Nome<input className="app-input" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} maxLength={255} required /></label><label className="grid gap-2 text-sm font-bold md:col-span-2">Descrição<textarea className="app-input min-h-24 resize-y" value={draft.description ?? ''} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={1600} required /></label>
-          <label className="grid gap-2 text-sm font-bold">Modalidade<select className="app-input" value={draft.modality} onChange={(event) => { const next = event.target.value as Modality; const court = state.courts.find((item) => item.modality === next); setDraft((current) => ({ ...current, modality: next, courtId: court?.id ?? '', courtName: court?.name ?? '', location: court?.name ?? current.location })); }}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="grid gap-2 text-sm font-bold">Modalidade<select className="app-input" value={draft.modality} onChange={(event) => { const next = event.target.value as Modality; const court = state.courts.find((item) => item.modality === next); setDraft((current) => ({ ...current, modality: next, courtId: court?.id ?? '', courtName: court?.name ?? '', location: court?.name ?? current.location })); }} required>{modalityOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label className="grid gap-2 text-sm font-bold">Quadra<select className="app-input" value={draft.courtId ?? ''} onChange={(event) => { const court = state.courts.find((item) => item.id === event.target.value); setDraft((current) => ({ ...current, courtId: event.target.value, courtName: court?.name, location: current.location || court?.name })); }} required><option value="">Selecione</option>{state.courts.filter((court) => court.modality === draft.modality).map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}</select></label>
           <label className="grid gap-2 text-sm font-bold">Local<input className="app-input" value={draft.location ?? ''} onChange={(event) => setDraft((current) => ({ ...current, location: event.target.value }))} required /></label><label className="grid gap-2 text-sm font-bold">Cidade<input className="app-input" value={draft.city ?? ''} onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))} required /></label>
           <label className="grid gap-2 text-sm font-bold">Início<input className="app-input" type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} required /></label><label className="grid gap-2 text-sm font-bold">Término<input className="app-input" type="date" value={draft.endDate ?? ''} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} required /></label><label className="grid gap-2 text-sm font-bold">Prazo de inscrição<input className="app-input" type="date" value={draft.registrationDeadline ?? ''} onChange={(event) => setDraft((current) => ({ ...current, registrationDeadline: event.target.value }))} required /></label><label className="grid gap-2 text-sm font-bold">Limite de participantes<input className="app-input" type="number" min="2" max="500" value={draft.maxParticipants ?? 16} onChange={(event) => setDraft((current) => ({ ...current, maxParticipants: Number(event.target.value) }))} required /></label>

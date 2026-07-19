@@ -2,7 +2,6 @@ package com.playspace.api.user;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.playspace.api.common.AuditableEntity;
-import com.playspace.api.court.Modality;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -62,8 +61,8 @@ public class AppUser extends AuditableEntity {
 
     private LocalDate memberSince;
 
-    @Enumerated(EnumType.STRING)
-    private Modality favoriteModality;
+    @Column(length = 40)
+    private String favoriteModality;
 
     private String sportsLevel;
     private int reservationsDone;
@@ -177,11 +176,11 @@ public class AppUser extends AuditableEntity {
         this.memberSince = memberSince;
     }
 
-    public Modality getFavoriteModality() {
+    public String getFavoriteModality() {
         return favoriteModality;
     }
 
-    public void setFavoriteModality(Modality favoriteModality) {
+    public void setFavoriteModality(String favoriteModality) {
         this.favoriteModality = favoriteModality;
     }
 

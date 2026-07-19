@@ -1,6 +1,5 @@
 package com.playspace.api.user;
 
-import com.playspace.api.court.Modality;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Set;
@@ -17,7 +16,7 @@ public record UserResponse(
         String avatarUrl,
         String bio,
         String sportsLevel,
-        Modality favoriteModality,
+        String favoriteModality,
         Set<String> practicedSports,
         String availability,
         LocalDate memberSince,

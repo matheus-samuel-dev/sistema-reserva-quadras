@@ -1,11 +1,8 @@
 package com.playspace.api.community;
 
 import com.playspace.api.common.AuditableEntity;
-import com.playspace.api.court.Modality;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -20,9 +17,8 @@ public class Championship extends AuditableEntity {
     @Column(nullable = false)
     private String name;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Modality modality;
+    @Column(nullable = false, length = 40)
+    private String modality;
 
     private LocalDate startDate;
     private String categories;
@@ -51,11 +47,11 @@ public class Championship extends AuditableEntity {
         this.name = name;
     }
 
-    public Modality getModality() {
+    public String getModality() {
         return modality;
     }
 
-    public void setModality(Modality modality) {
+    public void setModality(String modality) {
         this.modality = modality;
     }
 

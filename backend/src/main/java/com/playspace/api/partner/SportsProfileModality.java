@@ -1,6 +1,5 @@
 package com.playspace.api.partner;
 
-import com.playspace.api.court.Modality;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -26,9 +25,8 @@ public class SportsProfileModality {
     @JoinColumn(name = "profile_id", nullable = false)
     private SportsProfile profile;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
-    private Modality modality;
+    private String modality;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
@@ -40,8 +38,8 @@ public class SportsProfileModality {
     public Long getId() { return id; }
     public SportsProfile getProfile() { return profile; }
     public void setProfile(SportsProfile profile) { this.profile = profile; }
-    public Modality getModality() { return modality; }
-    public void setModality(Modality modality) { this.modality = modality; }
+    public String getModality() { return modality; }
+    public void setModality(String modality) { this.modality = modality; }
     public SportsLevel getLevel() { return level; }
     public void setLevel(SportsLevel level) { this.level = level; }
     public boolean isPrimaryModality() { return primaryModality; }

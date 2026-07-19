@@ -9,7 +9,6 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import type { CommunityPost, Modality } from '../../lib/types';
 
-const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
 const formatDateTime = (value: string) => new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'medium', timeStyle: 'short'
 }).format(new Date(value));
@@ -45,6 +44,8 @@ export function CommunityPage() {
   );
   const commentsPost = state.posts.find((post) => post.id === commentsPostId);
   const commentToDelete = commentsPost?.commentItems?.find((comment) => comment.id === deleteCommentId);
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
+  const modalityOptions = draft.modality && !activeModalities.includes(draft.modality) ? [draft.modality, ...activeModalities] : activeModalities;
   if (!user) return null;
 
   const openCreate = () => {
@@ -201,7 +202,7 @@ export function CommunityPage() {
             </label>
             <label className="grid gap-2 text-sm font-bold">Modalidade (opcional)
               <select className="app-input" value={draft.modality} onChange={(event) => setDraft((current) => ({ ...current, modality: event.target.value as Modality | '' }))}>
-                <option value="">Todas</option>{modalities.map((modality) => <option key={modality}>{modality}</option>)}
+                <option value="">Todas</option>{modalityOptions.map((modality) => <option key={modality}>{modality}</option>)}
               </select>
             </label>
           </div>

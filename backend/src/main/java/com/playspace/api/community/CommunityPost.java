@@ -1,12 +1,9 @@
 package com.playspace.api.community;
 
 import com.playspace.api.common.AuditableEntity;
-import com.playspace.api.court.Modality;
 import com.playspace.api.user.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -30,8 +27,8 @@ public class CommunityPost extends AuditableEntity {
     @Column(nullable = false)
     private String type;
 
-    @Enumerated(EnumType.STRING)
-    private Modality modality;
+    @Column(length = 40)
+    private String modality;
 
     private int likes;
     private int comments;
@@ -68,11 +65,11 @@ public class CommunityPost extends AuditableEntity {
         this.type = type;
     }
 
-    public Modality getModality() {
+    public String getModality() {
         return modality;
     }
 
-    public void setModality(Modality modality) {
+    public void setModality(String modality) {
         this.modality = modality;
     }
 

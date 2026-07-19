@@ -6,6 +6,7 @@ import com.playspace.api.common.ConflictException;
 import com.playspace.api.common.NotFoundException;
 import com.playspace.api.court.CourtRepository;
 import com.playspace.api.court.CourtStatus;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.notification.NotificationService;
 import com.playspace.api.payment.PaymentRepository;
 import com.playspace.api.payment.PaymentStatus;
@@ -48,6 +49,7 @@ public class ReservationService {
     private final NotificationService notifications;
     private final AuditService audit;
     private final PlatformSettingsRepository settingsRepository;
+    private final SportModalityService modalities;
 
     public ReservationService(
             ReservationRepository reservations,
@@ -56,7 +58,8 @@ public class ReservationService {
             PaymentRepository payments,
             NotificationService notifications,
             AuditService audit,
-            PlatformSettingsRepository settingsRepository
+            PlatformSettingsRepository settingsRepository,
+            SportModalityService modalities
     ) {
         this.reservations = reservations;
         this.courts = courts;
@@ -65,6 +68,7 @@ public class ReservationService {
         this.notifications = notifications;
         this.audit = audit;
         this.settingsRepository = settingsRepository;
+        this.modalities = modalities;
     }
 
     @Transactional
@@ -75,6 +79,7 @@ public class ReservationService {
         if (court.getStatus() != CourtStatus.DISPONIVEL) {
             throw new BusinessException("A quadra selecionada não está disponível para reservas.");
         }
+        modalities.requireActive(court.getModality());
         validateCapacity(request.players(), court.getPlayerCapacity());
         if (reservations.existsByCourtIdAndDateAndStatusInAndStartTimeLessThanAndEndTimeGreaterThan(
                 court.getId(),

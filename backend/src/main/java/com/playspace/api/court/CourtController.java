@@ -2,6 +2,7 @@ package com.playspace.api.court;
 
 import com.playspace.api.common.AuditService;
 import com.playspace.api.common.NotFoundException;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.security.CurrentUserService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -24,11 +25,14 @@ public class CourtController {
     private final CourtRepository courts;
     private final CurrentUserService currentUser;
     private final AuditService audit;
+    private final SportModalityService modalities;
 
-    public CourtController(CourtRepository courts, CurrentUserService currentUser, AuditService audit) {
+    public CourtController(CourtRepository courts, CurrentUserService currentUser, AuditService audit,
+                           SportModalityService modalities) {
         this.courts = courts;
         this.currentUser = currentUser;
         this.audit = audit;
+        this.modalities = modalities;
     }
 
     @GetMapping
@@ -46,6 +50,7 @@ public class CourtController {
     @Transactional
     public Court create(@Valid @RequestBody Court court) {
         court.setId(null);
+        court.setModality(modalities.requireActive(court.getModality()).getCode());
         var saved = courts.save(court);
         audit.record(currentUser.user(), "Criou a quadra " + saved.getName(), "QUADRA");
         return saved;
@@ -57,7 +62,7 @@ public class CourtController {
     public Court update(@PathVariable Long id, @Valid @RequestBody Court payload) {
         var court = courts.findById(id).orElseThrow(() -> new NotFoundException("Quadra não encontrada."));
         court.setName(payload.getName());
-        court.setModality(payload.getModality());
+        court.setModality(modalities.requireActive(payload.getModality()).getCode());
         court.setDescription(payload.getDescription());
         court.setPricePerHour(payload.getPricePerHour());
         court.setPlayerCapacity(payload.getPlayerCapacity());

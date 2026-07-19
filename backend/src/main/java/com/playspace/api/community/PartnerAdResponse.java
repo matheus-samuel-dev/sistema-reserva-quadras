@@ -1,6 +1,5 @@
 package com.playspace.api.community;
 
-import com.playspace.api.court.Modality;
 import java.time.OffsetDateTime;
 
 public record PartnerAdResponse(
@@ -8,7 +7,7 @@ public record PartnerAdResponse(
         Long playerId,
         String playerName,
         String avatarUrl,
-        Modality modality,
+        String modality,
         String level,
         String city,
         String availability,

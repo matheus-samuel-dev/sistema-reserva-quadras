@@ -1,6 +1,5 @@
 package com.playspace.api.reservation;
 
-import com.playspace.api.court.Modality;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Collection;
@@ -75,8 +74,17 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
               )
             order by r.date desc, r.startTime desc
             """)
-    List<Reservation> search(String search, ReservationStatus status, LocalDate date, Long courtId, Modality modality);
+    List<Reservation> search(String search, ReservationStatus status, LocalDate date, Long courtId, String modality);
 
     @Query("select coalesce(sum(r.totalValue), 0) from Reservation r where r.status in :statuses and r.date between :start and :end")
     java.math.BigDecimal sumRevenue(LocalDate start, LocalDate end, Collection<ReservationStatus> statuses);
+
+    @Query("""
+            select r.modality, count(r)
+            from Reservation r
+            where r.status <> com.playspace.api.reservation.ReservationStatus.CANCELADA
+            group by r.modality
+            order by count(r) desc, r.modality asc
+            """)
+    List<Object[]> countReservationsByModality();
 }

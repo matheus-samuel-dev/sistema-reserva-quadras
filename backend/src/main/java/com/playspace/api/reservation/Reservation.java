@@ -2,7 +2,6 @@ package com.playspace.api.reservation;
 
 import com.playspace.api.common.AuditableEntity;
 import com.playspace.api.court.Court;
-import com.playspace.api.court.Modality;
 import com.playspace.api.payment.PaymentMethod;
 import com.playspace.api.user.AppUser;
 import jakarta.persistence.Column;
@@ -38,9 +37,8 @@ public class Reservation extends AuditableEntity {
     @JoinColumn(nullable = false)
     private Court court;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Modality modality;
+    @Column(nullable = false, length = 40)
+    private String modality;
 
     @NotNull
     @Column(nullable = false)
@@ -105,11 +103,11 @@ public class Reservation extends AuditableEntity {
         this.court = court;
     }
 
-    public Modality getModality() {
+    public String getModality() {
         return modality;
     }
 
-    public void setModality(Modality modality) {
+    public void setModality(String modality) {
         this.modality = modality;
     }
 

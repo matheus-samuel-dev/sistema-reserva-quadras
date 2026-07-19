@@ -30,7 +30,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { CourtImage, getSafeCourtImageSource } from '../../components/CourtImage';
@@ -50,9 +50,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { fetchSystemStatus, tokenFromStorage } from '../../lib/api';
 import { reservationStatusOrder } from '../../lib/status';
 import type { Court, CourtStatus, Modality, Payment, PaymentStatus, Reservation, ReservationFormInput, ReservationStatus, Role, User } from '../../lib/types';
+import { aggregatePeakHours, aggregateReservationsByModality, formatModalityName } from './dashboardAnalytics';
 
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const modalities: Modality[] = ['Beach Tennis', 'Futevôlei', 'Society', 'Tênis', 'Vôlei', 'Basquete'];
 const courtStatuses: CourtStatus[] = ['Disponível', 'Em manutenção', 'Indisponível'];
 const reservationStatuses: ReservationStatus[] = [...reservationStatusOrder];
 const reservationTransitions: Record<ReservationStatus, ReservationStatus[]> = {
@@ -118,7 +118,7 @@ function SectionTitle({ title, action }: { title: string; action?: ReactNode }) 
 
 function ChartEmptyState({ description }: { description: string }) {
   return (
-    <div className="grid min-h-44 place-items-center rounded-lg border border-dashed border-line bg-[var(--surface-1)] p-5 text-center">
+    <div className="grid h-full min-h-[17rem] place-items-center rounded-lg border border-dashed border-line bg-[var(--surface-1)] p-5 text-center">
       <div>
         <BarChart3 className="mx-auto h-7 w-7 text-muted" aria-hidden="true" />
         <p className="mt-3 font-bold">Sem dados no período</p>
@@ -186,32 +186,45 @@ export function AdminDashboard() {
     const monthKey = today.slice(0, 7);
     const revenue = state.payments.filter((item) => item.status === 'Aprovado' && (item.paidAt ?? today).slice(0, 7) === monthKey).reduce((sum, item) => sum + item.amount, 0);
     const occupiedHours = weekReservations.reduce((sum, item) => sum + Math.max(0, minutesBetween(item.startTime, item.endTime)) / 60, 0);
-    const totalAvailableHours = Math.max(1, state.courts.filter((court) => court.status === 'Disponível').length * 14 * 7);
-    const occupancy = Math.round((occupiedHours / totalAvailableHours) * 100);
+    const [fallbackOpening = '08:00', fallbackClosing = '22:00'] = state.settings.hours.split(' - ').map((value) => value.trim());
+    const openingTime = state.settings.openingTime ?? fallbackOpening;
+    const closingTime = state.settings.closingTime ?? fallbackClosing;
+    const configuredDailyHours = minutesBetween(openingTime, closingTime) / 60;
+    const dailyAvailableHours = Number.isFinite(configuredDailyHours) && configuredDailyHours > 0 ? configuredDailyHours : 14;
+    const weekdayKeys = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'] as const;
+    const operatingDays = new Set(state.settings.operatingDays ?? weekdayKeys);
+    const operatingDaysInWeek = weekDays.filter((day) => operatingDays.has(weekdayKeys[new Date(`${day}T12:00:00`).getDay()])).length;
+    const totalAvailableHours = Math.max(1, state.courts.filter((court) => court.status === 'Disponível').length * dailyAvailableHours * operatingDaysInWeek);
+    const occupancy = Math.min(100, Math.round((occupiedHours / totalAvailableHours) * 100));
     const cancellations = state.reservations.filter((item) => item.status === 'Cancelada').length;
     const byStatus = reservationStatuses.map((status) => ({ name: status, value: state.reservations.filter((item) => item.status === status).length }));
-    const byModality = modalities.map((modality) => ({ name: modality, reservas: state.reservations.filter((item) => item.modality === modality).length }));
+    const byModality = aggregateReservationsByModality(activeReservations, [
+      ...state.modalityCatalog.filter((item) => item.active).map((item) => item.name),
+      ...state.courts.map((court) => court.modality)
+    ]);
+    const approvedRevenue = new Map(
+      state.payments
+        .filter((payment) => payment.status === 'Aprovado')
+        .map((payment) => [payment.reservationId, payment.amount])
+    );
     const daily = weekDays.map((day) => ({
       day: sentenceCase(new Date(`${day}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' })),
       reservas: weekReservations.filter((item) => item.date === day).length,
-      receita: weekReservations.filter((item) => item.date === day).reduce((sum, item) => sum + item.totalValue, 0)
+      receita: weekReservations
+        .filter((item) => item.date === day)
+        .reduce((sum, item) => sum + (approvedRevenue.get(item.id) ?? 0), 0)
     }));
-    const peakHours = Array.from(
-      activeReservations.reduce((map, reservation) => map.set(reservation.startTime, (map.get(reservation.startTime) ?? 0) + 1), new Map<string, number>())
-    )
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([hour, reservas]) => ({ hour, reservas }));
+    const peakHours = aggregatePeakHours(activeReservations, 6);
     const mostBookedCourt = [...state.courts]
-      .map((court) => ({ court, count: state.reservations.filter((item) => item.courtId === court.id).length }))
+      .map((court) => ({ court, count: activeReservations.filter((item) => item.courtId === court.id).length }))
       .sort((a, b) => b.count - a.count)[0]?.court.name ?? '-';
 
-    const visibleModalities = byModality.filter((item) => item.reservas > 0);
+    const visibleModalities = byModality;
     const maxDailyReservations = Math.max(1, ...daily.map((item) => item.reservas));
     const maxDailyRevenue = Math.max(100, ...daily.map((item) => item.receita));
 
     return { todayReservations, weekReservations, upcoming, revenue, occupancy, cancellations, byStatus, byModality, visibleModalities, daily, peakHours, mostBookedCourt, maxDailyReservations, maxDailyRevenue };
-  }, [state.courts, state.payments, state.reservations]);
+  }, [state.courts, state.modalityCatalog, state.payments, state.reservations, state.settings]);
 
   const executives: Array<[string, string, LucideIcon, 'neon' | 'cyan' | 'amber' | 'danger']> = [
     ['Quadra mais reservada', data.mostBookedCourt, Volleyball, 'neon'],
@@ -223,7 +236,7 @@ export function AdminDashboard() {
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Painel executivo com operação, receita, ocupação, cancelamentos e agenda futura." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 min-[1800px]:grid-cols-6">
         <StatCard title="Reservas hoje" value={data.todayReservations.length} hint="Calculado pela agenda de hoje" icon={CalendarDays} tone="neon" />
         <StatCard title="Reservas da semana" value={data.weekReservations.length} hint="Segunda a domingo" icon={CalendarClock} tone="cyan" />
         <StatCard title="Taxa de ocupação" value={`${data.occupancy}%`} hint="Horas ocupadas ÷ horas disponíveis" icon={TrendingUp} tone="neon" />
@@ -236,10 +249,10 @@ export function AdminDashboard() {
         {executives.map(([title, value, Icon, tone]) => <StatCard key={title} title={title} value={value} icon={Icon} tone={tone} />)}
       </div>
 
-      <div className="mt-4 grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <section className="glass-panel min-w-0 rounded-lg p-5">
+      <div className="mt-4 grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.3fr)]">
+        <section className="glass-panel flex h-full min-w-0 flex-col rounded-lg p-5">
           <SectionTitle title="Próximas reservas" action={<StatusBadge status="Confirmada" compact />} />
-          <div className="grid gap-3">
+          <div className="grid flex-1 content-start gap-3">
             {data.upcoming.map((reservation) => (
               <div key={reservation.id} className="app-card flex min-w-0 flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
                 <Avatar name={reservation.clientName} src={state.users.find((item) => item.id === reservation.clientId)?.profile.photo} size={40} />
@@ -253,63 +266,102 @@ export function AdminDashboard() {
             {data.upcoming.length === 0 && <EmptyState title="Sem reservas futuras" description="Novas reservas aparecerão aqui em tempo real." />}
           </div>
         </section>
-        <section className="glass-panel min-w-0 overflow-hidden rounded-lg p-5">
-          <SectionTitle title="Reservas e receita da semana" action={<strong className="text-neon">{data.occupancy}% ocupação</strong>} />
+        <section className="glass-panel flex h-full min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg p-4 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-black">Reservas e receita da semana</h2>
+              <p className="mt-1 text-xs leading-5 text-muted">Segunda a domingo · receita de pagamentos aprovados</p>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-neon/25 bg-neon/10 px-3 py-1.5 text-xs font-black text-neon" aria-label={`${data.occupancy}% de ocupação na semana`}>
+              <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+              {data.occupancy}% ocupação
+            </span>
+          </div>
           {data.weekReservations.length === 0
             ? <ChartEmptyState description="As reservas confirmadas desta semana aparecerão aqui com a receita correspondente." />
-            : <div className="h-[250px] min-w-0">
+            : <>
+              <div className="mb-1 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-semibold text-muted" aria-label="Legenda do gráfico semanal">
+                <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-neon" aria-hidden="true" />Reservas</span>
+                <span className="inline-flex items-center gap-2"><span className="h-0.5 w-5 rounded-full bg-cyan" aria-hidden="true" />Receita aprovada</span>
+              </div>
+              <div className="min-h-[18rem] min-w-0 flex-1" role="img" aria-label="Gráfico de reservas e receita aprovada por dia da semana">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.daily} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}>
-                    <CartesianGrid stroke="var(--line)" vertical={false} />
-                    <XAxis dataKey="day" stroke="var(--muted)" tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="reservas" stroke="var(--primary)" allowDecimals={false} domain={[0, Math.ceil(data.maxDailyReservations * 1.2)]} width={28} tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="receita" orientation="right" stroke="var(--info)" domain={[0, Math.ceil(data.maxDailyRevenue * 1.15)]} width={58} tickFormatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR', { notation: 'compact' })}`} tickLine={false} axisLine={false} />
+                  <ComposedChart data={data.daily} margin={{ top: 14, right: 2, bottom: 2, left: 0 }}>
+                    <CartesianGrid stroke="var(--line)" strokeDasharray="3 5" vertical={false} />
+                    <XAxis dataKey="day" stroke="var(--muted)" interval={0} minTickGap={4} tick={{ fontSize: 12, fontWeight: 600 }} tickMargin={11} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="reservas" stroke="var(--primary)" allowDecimals={false} domain={[0, data.maxDailyReservations]} width={34} tick={{ fontSize: 12 }} tickMargin={6} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="receita" orientation="right" stroke="var(--info)" domain={[0, data.maxDailyRevenue]} width={64} tick={{ fontSize: 12 }} tickMargin={6} tickFormatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR', { notation: 'compact' })}`} tickLine={false} axisLine={false} />
                     <RechartsTooltip contentStyle={chartTooltip} labelFormatter={(label) => `Dia: ${label}`} formatter={(value, name) => name === 'receita' ? [currency(Number(value)), 'Receita'] : [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Reservas']} />
-                    <Legend verticalAlign="top" align="right" height={36} formatter={(value) => value === 'receita' ? 'Receita (R$)' : 'Reservas'} />
-                    <Line yAxisId="reservas" type="monotone" dataKey="reservas" stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                    <Line yAxisId="receita" type="monotone" dataKey="receita" stroke="var(--info)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                  </LineChart>
+                    <Bar yAxisId="reservas" dataKey="reservas" fill="var(--primary)" fillOpacity={0.82} radius={[5, 5, 0, 0]} maxBarSize={32} />
+                    <Line yAxisId="receita" type="monotone" dataKey="receita" stroke="var(--info)" strokeWidth={3} dot={{ r: 3.5, fill: 'var(--surface-elevated)', strokeWidth: 2 }} activeDot={{ r: 5 }} />
+                  </ComposedChart>
                 </ResponsiveContainer>
-              </div>}
+              </div>
+              <ul className="sr-only" aria-label="Dados do gráfico semanal">{data.daily.map((item) => <li key={item.day}>{item.day}: {item.reservas} reservas e {currency(item.receita)} de receita aprovada</li>)}</ul>
+            </>}
         </section>
       </div>
 
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-3">
-        <section className="glass-panel rounded-lg p-5">
+      <div className="mt-4 grid min-w-0 items-stretch gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+        <section className="glass-panel flex h-full min-h-[26rem] min-w-0 flex-col rounded-lg p-4 sm:p-5">
           <SectionTitle title="Reservas por status" />
           <ReservationStatusDonut data={data.byStatus} />
         </section>
-        <section className="glass-panel rounded-lg p-5">
-          <SectionTitle title="Reservas por modalidade" />
+        <section className="glass-panel flex h-full min-h-[26rem] min-w-0 flex-col overflow-hidden rounded-lg p-4 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-black">Reservas por modalidade</h2>
+              <p className="mt-1 text-xs leading-5 text-muted">Reservas não canceladas · atualização automática</p>
+            </div>
+            {data.visibleModalities.length > 0 && <span className="shrink-0 rounded-full border border-cyan/25 bg-cyan/10 px-2.5 py-1 text-xs font-black text-cyan">{data.visibleModalities.length} {data.visibleModalities.length === 1 ? 'modalidade' : 'modalidades'}</span>}
+          </div>
           {data.visibleModalities.length === 0
             ? <ChartEmptyState description="O comparativo será exibido após a primeira reserva do período." />
-            : <div style={{ height: Math.min(248, Math.max(180, data.visibleModalities.length * 42)) }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.visibleModalities} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }} barCategoryGap="28%">
-                    <CartesianGrid stroke="var(--line)" horizontal={false} />
-                    <XAxis type="number" stroke="var(--muted)" allowDecimals={false} domain={[0, 'dataMax + 1']} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="name" stroke="var(--muted)" width={86} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                    <RechartsTooltip contentStyle={chartTooltip} formatter={(value) => [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Total']} cursor={{ fill: 'var(--surface-hover)' }} />
-                    <Bar dataKey="reservas" fill="var(--info)" radius={[0, 6, 6, 0]} maxBarSize={24} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>}
+            : <>
+              <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1" role="img" aria-label={`Gráfico com ${data.visibleModalities.length} modalidades e suas reservas`}>
+                <div className="h-full min-w-0" style={{ minHeight: Math.max(288, data.visibleModalities.length * 48) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.visibleModalities} layout="vertical" margin={{ top: 6, right: 34, bottom: 8, left: 0 }} barCategoryGap="26%">
+                      <CartesianGrid stroke="var(--line)" strokeDasharray="3 5" horizontal={false} />
+                      <XAxis type="number" stroke="var(--muted)" allowDecimals={false} domain={[0, 'dataMax']} tick={{ fontSize: 12 }} tickMargin={8} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="name" stroke="var(--muted)" width={136} tick={{ fontSize: 13, fontWeight: 600 }} tickMargin={10} tickLine={false} axisLine={false} />
+                      <RechartsTooltip contentStyle={chartTooltip} formatter={(value) => [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Total']} cursor={{ fill: 'var(--surface-hover)' }} />
+                      <Bar dataKey="reservas" fill="var(--info)" radius={[0, 7, 7, 0]} maxBarSize={28}>
+                        <LabelList dataKey="reservas" position="right" fill="var(--text)" fontSize={12} fontWeight={800} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <ul className="sr-only" aria-label="Dados de reservas por modalidade">{data.visibleModalities.map((item) => <li key={item.key}>{item.name}: {item.reservas} {item.reservas === 1 ? 'reserva' : 'reservas'}</li>)}</ul>
+            </>}
         </section>
-        <section className="glass-panel rounded-lg p-5">
-          <SectionTitle title="Horários mais utilizados" />
+        <section className="glass-panel flex h-full min-h-[26rem] min-w-0 flex-col overflow-hidden rounded-lg p-4 sm:p-5 xl:col-span-2 2xl:col-span-1">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-black">Horários mais utilizados</h2>
+              <p className="mt-1 text-xs leading-5 text-muted">Top 6 em ordem decrescente de procura</p>
+            </div>
+            {data.peakHours.length > 0 && <span className="shrink-0 rounded-full border border-neon/25 bg-neon/10 px-2.5 py-1 text-xs font-black text-neon">Mais usado: {data.peakHours[0].label}</span>}
+          </div>
           {data.peakHours.length === 0
             ? <ChartEmptyState description="Os horários de maior procura serão calculados automaticamente." />
-            : <div className="h-[220px]">
+            : <>
+              <div className="min-h-[18rem] min-w-0 flex-1" role="img" aria-label="Gráfico dos seis horários mais utilizados em ordem de procura">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.peakHours} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barCategoryGap="32%">
-                    <CartesianGrid stroke="var(--line)" vertical={false} />
-                    <XAxis dataKey="hour" stroke="var(--muted)" tickLine={false} axisLine={false} />
-                    <YAxis stroke="var(--muted)" allowDecimals={false} domain={[0, 'dataMax + 1']} width={28} tickLine={false} axisLine={false} />
-                    <RechartsTooltip contentStyle={chartTooltip} labelFormatter={(label) => `Horário: ${label}`} formatter={(value) => [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Total']} cursor={{ fill: 'var(--surface-hover)' }} />
-                    <Bar dataKey="reservas" fill="var(--primary)" radius={[6, 6, 0, 0]} maxBarSize={38} />
+                  <BarChart data={data.peakHours} margin={{ top: 28, right: 8, bottom: 4, left: 0 }} barCategoryGap="24%">
+                    <CartesianGrid stroke="var(--line)" strokeDasharray="3 5" vertical={false} />
+                    <XAxis dataKey="label" stroke="var(--muted)" interval={0} tick={{ fontSize: 13, fontWeight: 700 }} tickMargin={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--muted)" allowDecimals={false} domain={[0, 'dataMax']} width={34} tick={{ fontSize: 12 }} tickMargin={6} tickLine={false} axisLine={false} />
+                    <RechartsTooltip contentStyle={chartTooltip} labelFormatter={(_, payload) => `Horário: ${payload?.[0]?.payload?.hour ?? ''}`} formatter={(value) => [`${value} ${Number(value) === 1 ? 'reserva' : 'reservas'}`, 'Total']} cursor={{ fill: 'var(--surface-hover)' }} />
+                    <Bar dataKey="reservas" fill="var(--primary)" radius={[7, 7, 0, 0]} maxBarSize={48}>
+                      <LabelList dataKey="reservas" position="top" fill="var(--text)" fontSize={12} fontWeight={800} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>}
+              </div>
+              <ul className="sr-only" aria-label="Dados dos horários mais utilizados">{data.peakHours.map((item) => <li key={item.hour}>{item.hour}: {item.reservas} {item.reservas === 1 ? 'reserva' : 'reservas'}</li>)}</ul>
+            </>}
         </section>
       </div>
 
@@ -345,6 +397,7 @@ export function AdminDashboard() {
 
 export function AdminAgendaPage() {
   const { state } = useAppData();
+  const filterModalities = state.modalityCatalog.map((item) => item.name);
   const { user } = useAuth();
   const [selected, setSelected] = useState<Reservation | null>(null);
   const [creating, setCreating] = useState(false);
@@ -370,7 +423,7 @@ export function AdminAgendaPage() {
               Modalidade
             <select className="form-control w-full min-w-44 px-3 py-2 text-sm" value={modalityFilter} onChange={(event) => setModalityFilter(event.target.value as Modality | 'Todas')} aria-label="Filtrar agenda por modalidade">
               <option value="Todas">Todas as modalidades</option>
-              {modalities.map((modality) => <option key={modality}>{modality}</option>)}
+              {filterModalities.map((modality) => <option key={modality}>{modality}</option>)}
             </select>
             </label>
           </div>
@@ -389,6 +442,8 @@ export function AdminAgendaPage() {
 
 export function AdminCourtsPage() {
   const { state, dataSource, saveCourt, removeCourt } = useAppData();
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
+  const defaultModality = activeModalities[0] ?? ('' as Modality);
   const [editing, setEditing] = useState<Court | null>(null);
   const [removing, setRemoving] = useState<Court | null>(null);
   const [toast, setToast] = useState('');
@@ -396,9 +451,9 @@ export function AdminCourtsPage() {
   const blank: Court = {
     id: '',
     name: '',
-    modality: 'Beach Tennis',
+    modality: defaultModality,
     description: '',
-    pricePerHour: 120,
+    pricePerHour: state.modalityCatalog.find((item) => item.name === defaultModality)?.defaultPrice ?? 120,
     playerCapacity: 4,
     status: 'Disponível',
     image: '',
@@ -437,7 +492,7 @@ export function AdminCourtsPage() {
           </article>
         ))}
       </div>
-      <CourtModal key={editing?.id || (editing ? 'new' : 'closed')} court={editing} allowUpload={dataSource === 'demo'} onClose={() => setEditing(null)} onSave={async (court) => {
+      <CourtModal key={editing?.id || (editing ? 'new' : 'closed')} court={editing} modalityOptions={activeModalities} allowUpload={dataSource === 'demo'} onClose={() => setEditing(null)} onSave={async (court) => {
         try { await saveCourt(court); setEditing(null); setToastTone('success'); setToast('Quadra salva com sucesso.'); }
         catch (error) { setToastTone('danger'); setToast(error instanceof Error ? error.message : 'Não foi possível salvar a quadra.'); }
       }} />
@@ -451,7 +506,7 @@ export function AdminCourtsPage() {
   );
 }
 
-function CourtModal({ court, allowUpload, onClose, onSave }: { court: Court | null; allowUpload: boolean; onClose: () => void; onSave: (court: Court) => void | Promise<void> }) {
+function CourtModal({ court, modalityOptions, allowUpload, onClose, onSave }: { court: Court | null; modalityOptions: Modality[]; allowUpload: boolean; onClose: () => void; onSave: (court: Court) => void | Promise<void> }) {
   const [draft, setDraft] = useState<Court | null>(() => court ? { ...court, image: getSafeCourtImageSource(court.image) ? court.image : '' } : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -483,9 +538,14 @@ function CourtModal({ court, allowUpload, onClose, onSave }: { court: Court | nu
   };
   return (
     <Modal title={court.id ? 'Editar quadra' : 'Nova quadra'} open={Boolean(court)} onClose={onClose}>
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); setError(''); if (draft.image && !getSafeCourtImageSource(draft.image)) { setError('Informe uma URL de imagem HTTP ou HTTPS válida.'); return; } setSaving(true); try { await onSave(draft); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.'); } finally { setSaving(false); } }}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); setError(''); const normalizedModality = formatModalityName(draft.modality); if (!normalizedModality) { setError('Informe a modalidade da quadra.'); return; } if (draft.image && !getSafeCourtImageSource(draft.image)) { setError('Informe uma URL de imagem HTTP ou HTTPS válida.'); return; } setSaving(true); try { await onSave({ ...draft, modality: normalizedModality }); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.'); } finally { setSaving(false); } }}>
         <label className="grid gap-2 text-sm font-semibold">Nome<input className="form-control" value={draft.name} onChange={(event) => update('name', event.target.value)} required /></label>
-        <label className="grid gap-2 text-sm font-semibold">Modalidade<select className="form-control" value={draft.modality} onChange={(event) => update('modality', event.target.value)}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label className="grid gap-2 text-sm font-semibold">
+          Modalidade
+          <input className="form-control" list="court-modality-options" value={draft.modality} onChange={(event) => update('modality', event.target.value)} maxLength={80} required />
+          <datalist id="court-modality-options">{modalityOptions.map((item) => <option key={item} value={item} />)}</datalist>
+          <span className="text-xs font-normal leading-5 text-muted">Escolha uma opção ativa ou informe uma nova modalidade; ela será cadastrada antes da quadra.</span>
+        </label>
         <label className="grid gap-2 text-sm font-semibold">Preço/h<input className="form-control" type="number" min={1} value={draft.pricePerHour} onChange={(event) => update('pricePerHour', Number(event.target.value))} /></label>
         <label className="grid gap-2 text-sm font-semibold">Capacidade<input className="form-control" type="number" min={1} value={draft.playerCapacity} onChange={(event) => update('playerCapacity', Number(event.target.value))} /></label>
         <label className="grid gap-2 text-sm font-semibold">Status<select className="form-control" value={draft.status} onChange={(event) => update('status', event.target.value)}>{courtStatuses.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -751,6 +811,7 @@ export function AdminReportsPage() {
   });
   const peakHours = Array.from(state.reservations.filter((item) => item.status !== 'Cancelada').reduce((map, item) => map.set(item.startTime, (map.get(item.startTime) ?? 0) + 1), new Map<string, number>())).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([hour]) => hour);
   const activeClients = Array.from(state.reservations.reduce((map, item) => map.set(item.clientName, (map.get(item.clientName) ?? 0) + 1), new Map<string, number>())).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name]) => name);
+  const reservationsByModality = aggregateReservationsByModality(state.reservations.filter((item) => item.status !== 'Cancelada'));
   const exportFile = (name: string, content: string, type: string) => {
     const url = URL.createObjectURL(new Blob(['\ufeff', content], { type }));
     const link = document.createElement('a');
@@ -759,9 +820,10 @@ export function AdminReportsPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
-  const rows = state.reservations.map((reservation) => [reservation.code, reservation.clientName, reservation.courtName, reservation.date, reservation.startTime, reservation.endTime, reservation.status, reservation.totalValue.toFixed(2)]);
-  const csv = [['Código', 'Cliente', 'Quadra', 'Data', 'Início', 'Fim', 'Status', 'Valor'], ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
-  const excelTable = `<html><meta charset="utf-8"><body><h1>PlaySpace — Relatório de reservas</h1><p>Gerado em ${new Date().toLocaleString('pt-BR')}</p><table border="1">${[['Código', 'Cliente', 'Quadra', 'Data', 'Início', 'Fim', 'Status', 'Valor'], ...rows].map((row) => `<tr>${row.map((cell) => `<td>${String(cell)}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
+  const reportHeader = ['Código', 'Cliente', 'Quadra', 'Modalidade', 'Data', 'Início', 'Fim', 'Status', 'Valor'];
+  const rows = state.reservations.map((reservation) => [reservation.code, reservation.clientName, reservation.courtName, reservation.modality, reservation.date, reservation.startTime, reservation.endTime, reservation.status, reservation.totalValue.toFixed(2)]);
+  const csv = [reportHeader, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const excelTable = `<html><meta charset="utf-8"><body><h1>PlaySpace — Relatório de reservas</h1><p>Gerado em ${new Date().toLocaleString('pt-BR')}</p><table border="1">${[reportHeader, ...rows].map((row) => `<tr>${row.map((cell) => `<td>${String(cell)}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
   return (
     <>
       <PageHeader
@@ -807,10 +869,11 @@ export function AdminReportsPage() {
           </div>
         </section>
       </div>
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           ['Horários de pico', peakHours.length ? peakHours.join(', ') : 'Sem dados no período'],
           ['Clientes mais ativos', activeClients.length ? activeClients.join(', ') : 'Sem dados no período'],
+          ['Reservas por modalidade', reservationsByModality.length ? reservationsByModality.map((item) => `${item.name} (${item.reservas})`).join(', ') : 'Sem dados no período'],
           ['Cancelamentos', String(state.reservations.filter((item) => item.status === 'Cancelada').length)]
         ].map(([title, value]) => <div key={title} className="soft-panel card-hover rounded-lg p-5"><p className="text-sm text-muted">{title}</p><strong className="mt-2 block text-xl">{value}</strong></div>)}
       </div>
@@ -820,6 +883,8 @@ export function AdminReportsPage() {
 
 export function AdminUsersPage() {
   const { state, saveUser, toggleUserActive } = useAppData();
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
+  const defaultModality = activeModalities[0] ?? ('' as Modality);
   const [editing, setEditing] = useState<User | null>(null);
   const [viewing, setViewing] = useState<User | null>(null);
   const [query, setQuery] = useState('');
@@ -833,7 +898,7 @@ export function AdminUsersPage() {
     email: '',
     role: 'CLIENTE',
     active: true,
-    profile: { photo: 'NV', bio: '', city: 'São Paulo', memberSince: todayIso(), favoriteModality: 'Beach Tennis', sports: ['Beach Tennis'], level: 'Iniciante', reservationsDone: 0, matchesPlayed: 0, hoursOnCourt: 0, attendanceRate: 100, achievementsUnlocked: 0 }
+    profile: { photo: 'NV', bio: '', city: 'São Paulo', memberSince: todayIso(), favoriteModality: defaultModality, sports: defaultModality ? [defaultModality] : [], level: 'Iniciante', reservationsDone: 0, matchesPlayed: 0, hoursOnCourt: 0, attendanceRate: 100, achievementsUnlocked: 0 }
   };
   const filtered = state.users.filter((item) => {
     const matchesQuery = `${item.name} ${item.email} ${item.role} ${item.profile.city}`.toLowerCase().includes(query.toLowerCase());
@@ -871,7 +936,7 @@ export function AdminUsersPage() {
       </div>
       {filtered.length === 0 && <EmptyState title="Nenhum usuário encontrado" description="Ajuste sua busca ou crie um novo usuário demo." actionLabel="Novo usuário" onAction={() => setEditing(blank)} />}
       <UserDetailsModal user={viewing} state={state} onClose={() => setViewing(null)} />
-      <UserModal key={editing?.id || (editing ? 'new' : 'closed')} user={editing} onClose={() => setEditing(null)} onSave={async (saved) => { await saveUser(saved); setEditing(null); setToastTone('success'); setToast('Usuário salvo com sucesso.'); }} />
+      <UserModal key={editing?.id || (editing ? 'new' : 'closed')} user={editing} modalityOptions={activeModalities} onClose={() => setEditing(null)} onSave={async (saved) => { await saveUser(saved); setEditing(null); setToastTone('success'); setToast('Usuário salvo com sucesso.'); }} />
       <Toast message={toast} tone={toastTone} onClose={() => setToast('')} />
     </>
   );
@@ -931,13 +996,14 @@ function UserDetailsModal({ user, state, onClose }: { user: User | null; state: 
   );
 }
 
-function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () => void; onSave: (user: User) => void | Promise<void> }) {
+function UserModal({ user, modalityOptions, onClose, onSave }: { user: User | null; modalityOptions: Modality[]; onClose: () => void; onSave: (user: User) => void | Promise<void> }) {
   const [draft, setDraft] = useState(user);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   if (!user || !draft) return null;
+  const favoriteModalityOptions = modalityOptions.includes(draft.profile.favoriteModality) ? modalityOptions : [draft.profile.favoriteModality, ...modalityOptions];
   const update = (key: keyof User, value: string | boolean) => setDraft((current) => current ? { ...current, [key]: value } : current);
   return (
     <Modal title={user.id ? 'Editar usuário' : 'Novo usuário'} open={Boolean(user)} onClose={onClose}>
@@ -949,7 +1015,7 @@ function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () =
         <label className="grid gap-2 text-sm font-semibold">Cidade<input className="form-control" value={draft.profile.city} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, city: event.target.value } } : current)} /></label>
         <label className="grid gap-2 text-sm font-semibold">{user.id ? 'Nova senha (opcional)' : 'Senha provisória'}<input className="form-control" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required={!user.id} /></label>
         <label className="grid gap-2 text-sm font-semibold">Confirmar senha<input className="form-control" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required={Boolean(password) || !user.id} /></label>
-        <label className="grid gap-2 text-sm font-semibold">Modalidade favorita<select className="form-control" value={draft.profile.favoriteModality} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, favoriteModality: event.target.value as Modality } } : current)}>{modalities.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label className="grid gap-2 text-sm font-semibold">Modalidade favorita<select className="form-control" value={draft.profile.favoriteModality} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, favoriteModality: event.target.value as Modality } } : current)} required>{favoriteModalityOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
         <label className="grid gap-2 text-sm font-semibold">Nível esportivo<select className="form-control" value={draft.profile.level} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, level: event.target.value as User['profile']['level'] } } : current)}>{['Iniciante', 'Intermediário', 'Avançado', 'Competitivo'].map((item) => <option key={item}>{item}</option>)}</select></label>
         <label className="grid gap-2 text-sm font-semibold md:col-span-2">URL do avatar (opcional)<input className="form-control" type="url" value={draft.profile.photo.startsWith('http') ? draft.profile.photo : ''} placeholder="https://..." onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, photo: event.target.value } } : current)} /></label>
         <label className="grid gap-2 text-sm font-semibold md:col-span-2">Bio<textarea className="form-control min-h-24" value={draft.profile.bio} onChange={(event) => setDraft((current) => current ? { ...current, profile: { ...current.profile, bio: event.target.value } } : current)} /></label>
@@ -963,6 +1029,7 @@ function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () =
 
 export function AdminSettingsPage() {
   const { state, saveSettings } = useAppData();
+  const activeModalities = state.modalityCatalog.filter((item) => item.active).map((item) => item.name);
   const [draft, setDraft] = useState(() => structuredClone(state.settings));
   const [saved, setSaved] = useState('');
   const dirty = JSON.stringify(draft) !== JSON.stringify(state.settings);
@@ -987,12 +1054,12 @@ export function AdminSettingsPage() {
         </section>
         <section id="config-preços" className="glass-panel scroll-mt-24 rounded-lg p-5">
           <SectionTitle title="Modalidades e preços" />
-          <div className="mb-4 flex flex-wrap gap-2">{state.settings.modalities.map((item) => <span key={item} className="rounded-full border border-line px-3 py-1 text-sm">{item}</span>)}</div>
+          <div className="mb-4 flex flex-wrap gap-2">{activeModalities.map((item) => <span key={item} className="rounded-full border border-line px-3 py-1 text-sm">{item}</span>)}</div>
           <div className="grid gap-3 md:grid-cols-3">
-            {state.settings.modalities.map((item) => (
+            {activeModalities.map((item) => (
               <label key={item} className="grid gap-2 text-sm font-semibold">
                 {item}
-                <input className="form-control" type="number" min={0} step={5} value={draft.defaultPrices[item]} onChange={(event) => { setDraft((current) => ({ ...current, defaultPrices: { ...current.defaultPrices, [item]: Number(event.target.value) } })); setSaved(''); }} aria-label={`Preço padrão de ${item}`} />
+                <input className="form-control" type="number" min={0} step={5} value={draft.defaultPrices[item] ?? state.modalityCatalog.find((entry) => entry.name === item)?.defaultPrice ?? 0} onChange={(event) => { setDraft((current) => ({ ...current, defaultPrices: { ...current.defaultPrices, [item]: Number(event.target.value) } })); setSaved(''); }} aria-label={`Preço padrão de ${item}`} />
               </label>
             ))}
           </div>

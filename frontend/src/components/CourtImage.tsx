@@ -11,13 +11,10 @@ const courtPanels: Record<string, { column: number; row: number }> = {
   'c-neon': { column: 2, row: 1 }
 };
 
-const modalityPanels: Record<string, { column: number; row: number }> = {
-  'Beach Tennis': { column: 0, row: 0 },
-  Futevôlei: { column: 1, row: 0 },
-  Society: { column: 2, row: 0 },
-  Tênis: { column: 0, row: 1 },
-  Vôlei: { column: 1, row: 1 },
-  Basquete: { column: 2, row: 1 }
+const panelForModality = (modality: string) => {
+  const index = [...modality.normalize('NFKC')]
+    .reduce((hash, character) => (hash * 31 + character.codePointAt(0)!) >>> 0, 0) % 6;
+  return { column: index % 3, row: Math.floor(index / 3) };
 };
 
 const safeDataImagePattern = /^data:image\/(?:avif|gif|jpe?g|png|webp);base64,[a-z0-9+/=\s]+$/i;
@@ -53,7 +50,7 @@ export function CourtImage({
   const customSource = getSafeCourtImageSource(image);
   const [customImageFailed, setCustomImageFailed] = useState(false);
   const [artImageFailed, setArtImageFailed] = useState(false);
-  const panel = courtPanels[courtId] ?? (modality ? modalityPanels[modality] : undefined);
+  const panel = courtPanels[courtId] ?? (modality ? panelForModality(modality) : undefined);
   const accessibleAlt = alt ?? `Vista da ${courtName}${modality ? `, preparada para ${modality}` : ''}`;
   const showCustomImage = Boolean(customSource && !customImageFailed);
   const showFallback = !showCustomImage && (artImageFailed || !panel);

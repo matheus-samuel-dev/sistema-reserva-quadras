@@ -1,6 +1,5 @@
 package com.playspace.api.settings;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -30,7 +29,7 @@ public record SettingsRequest(
         @Min(30) @Max(480) int minimumReservationMinutes,
         @Min(1) @Max(730) int maximumAdvanceDays,
         @Min(15) @Max(240) int slotMinutes,
-        @NotEmpty Set<Modality> modalities,
+        @NotEmpty Set<@NotBlank @Size(max = 40) String> modalities,
         @NotEmpty Map<String, @NotNull @PositiveOrZero BigDecimal> defaultPrices,
         boolean acceptPix,
         boolean acceptCard,

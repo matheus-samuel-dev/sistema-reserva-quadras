@@ -1,6 +1,5 @@
 package com.playspace.api.user;
 
-import com.playspace.api.court.Modality;
 import java.util.Set;
 
 public record PreferenceResponse(
@@ -10,7 +9,7 @@ public record PreferenceResponse(
         boolean emailNotifications,
         boolean browserNotifications,
         String defaultCity,
-        Set<Modality> favoriteModalities,
+        Set<String> favoriteModalities,
         String preferredTimes,
         boolean privateProfile,
         boolean discoverableByPartners,

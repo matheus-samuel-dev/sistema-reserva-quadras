@@ -1,12 +1,9 @@
 package com.playspace.api.community;
 
 import com.playspace.api.common.AuditableEntity;
-import com.playspace.api.court.Modality;
 import com.playspace.api.user.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -24,9 +21,8 @@ public class PartnerAd extends AuditableEntity {
     @JoinColumn(nullable = false)
     private AppUser player;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Modality modality;
+    @Column(nullable = false, length = 40)
+    private String modality;
 
     private String level;
     private String city;
@@ -51,11 +47,11 @@ public class PartnerAd extends AuditableEntity {
         this.player = player;
     }
 
-    public Modality getModality() {
+    public String getModality() {
         return modality;
     }
 
-    public void setModality(Modality modality) {
+    public void setModality(String modality) {
         this.modality = modality;
     }
 

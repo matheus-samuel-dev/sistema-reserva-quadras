@@ -11,6 +11,7 @@ import {
   clearNotificationsWithApi,
   createCommunityCommentWithApi,
   createCommunityPostWithApi,
+  createModalityWithApi,
   createReviewWithApi,
   createReservationWithApi,
   deleteChampionshipWithApi,
@@ -51,6 +52,7 @@ import type {
   CommunityComment,
   CommunityPost,
   Court,
+  ModalityCatalogItem,
   NotificationItem,
   PartnerAd,
   Payment,
@@ -81,6 +83,7 @@ interface AppDataContextValue {
   payReservation: (reservationId: string, method: PaymentMethod, approve?: boolean) => Promise<Payment>;
   refundPayment: (paymentId: string, actor: User) => Promise<Payment>;
   saveCourt: (court: Court) => Promise<Court>;
+  createModality: (name: string, defaultPrice: number) => Promise<ModalityCatalogItem>;
   removeCourt: (courtId: string) => Promise<void>;
   saveUser: (user: User) => Promise<User>;
   toggleUserActive: (userId: string) => Promise<void>;
@@ -156,6 +159,7 @@ const mergeStoredDemoState = (value: unknown, safePreferences: Partial<SafeLocal
     ...candidate,
     users: Array.isArray(candidate.users) ? candidate.users : fresh.users,
     courts: Array.isArray(candidate.courts) ? candidate.courts : fresh.courts,
+    modalityCatalog: Array.isArray(candidate.modalityCatalog) ? candidate.modalityCatalog : fresh.modalityCatalog,
     reservations: Array.isArray(candidate.reservations) ? candidate.reservations : fresh.reservations,
     payments: Array.isArray(candidate.payments) ? candidate.payments : fresh.payments,
     posts: Array.isArray(candidate.posts) ? candidate.posts : fresh.posts,
@@ -186,6 +190,8 @@ const loadState = (): PlaySpaceState => {
 const nowIso = () => new Date().toISOString();
 const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);
 const activeStatuses = ['Pendente', 'Confirmada', 'Em andamento'];
+const modalityKey = (value: string) => value.normalize('NFKC').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
 const minutesBetween = (start: string, end: string) => {
   const [sh, sm] = start.split(':').map(Number);
@@ -271,6 +277,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       availabilityCoverage.current = remote.availabilityRange ? [remote.availabilityRange] : [];
       setState((current) => ({
         ...current,
+        modalityCatalog: remote.modalityCatalog ?? current.modalityCatalog,
         courts: remote.courts,
         reservations: remote.reservations,
         payments: remote.payments,
@@ -298,7 +305,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : {}),
         ...(remote.reviews !== undefined ? { reviews: remote.reviews } : {}),
         ...(remote.ranking !== undefined ? { ranking: remote.ranking } : {}),
-        ...(remote.settings !== undefined ? { settings: remote.settings } : {})
+        settings: remote.settings ?? {
+          ...current.settings,
+          modalities: (remote.modalityCatalog ?? current.modalityCatalog).filter((item) => item.active).map((item) => item.name),
+          defaultPrices: Object.fromEntries((remote.modalityCatalog ?? current.modalityCatalog).map((item) => [item.name, item.defaultPrice]))
+        }
       }));
       setDataSource('api');
     } catch (error) {
@@ -633,6 +644,39 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       return refunded;
     };
 
+    const createModality = async (name: string, defaultPrice: number): Promise<ModalityCatalogItem> => {
+      const normalizedName = name.normalize('NFKC').trim().replace(/\s+/g, ' ');
+      if (normalizedName.length < 2 || normalizedName.length > 80 || !/[\p{L}\p{N}]/u.test(normalizedName)) {
+        throw new Error('Informe um nome de modalidade válido, entre 2 e 80 caracteres.');
+      }
+      if (!Number.isFinite(defaultPrice) || defaultPrice < 0) {
+        throw new Error('Informe um preço padrão válido para a modalidade.');
+      }
+      const duplicate = state.modalityCatalog.find((item) => modalityKey(item.name) === modalityKey(normalizedName));
+      if (duplicate) throw new Error(`A modalidade ${duplicate.name} já está cadastrada.`);
+
+      const token = tokenFromStorage();
+      const created = dataSource === 'api' && token
+        ? await createModalityWithApi(normalizedName, defaultPrice, token)
+        : {
+            code: normalizedName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, ''),
+            name: normalizedName,
+            active: true,
+            defaultPrice
+          };
+      setState((current) => ({
+        ...current,
+        modalityCatalog: [...current.modalityCatalog.filter((item) => item.code !== created.code), created],
+        settings: {
+          ...current.settings,
+          modalities: [...current.settings.modalities.filter((item) => modalityKey(item) !== modalityKey(created.name)), created.name],
+          defaultPrices: { ...current.settings.defaultPrices, [created.name]: created.defaultPrice }
+        }
+      }));
+      return created;
+    };
+
     return {
       state,
       demoCredentials,
@@ -647,14 +691,18 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       changeReservationStatus,
       payReservation,
       refundPayment,
+      createModality,
       saveCourt: async (court) => {
         const token = tokenFromStorage();
         const generation = sessionGeneration.current;
+        const catalogItem = state.modalityCatalog.find((item) => modalityKey(item.name) === modalityKey(court.modality))
+          ?? await createModality(court.modality, court.pricePerHour);
+        const canonicalCourt = { ...court, modality: catalogItem.name };
         const saved = dataSource === 'api' && token
-          ? await saveCourtWithApi(court, token)
-          : court.id
-            ? court
-            : { ...court, id: crypto.randomUUID() };
+          ? await saveCourtWithApi(canonicalCourt, token)
+          : canonicalCourt.id
+            ? canonicalCourt
+            : { ...canonicalCourt, id: crypto.randomUUID() };
         if (generation !== sessionGeneration.current) return saved;
         setState((current) => ({
           ...current,
@@ -1142,11 +1190,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       registerDemoUser: (input) => {
         const email = input.email.trim().toLowerCase();
         if (state.users.some((item) => item.email.toLowerCase() === email)) throw new Error('Já existe uma conta com este e-mail.');
+        const defaultModality = state.modalityCatalog.find((item) => item.active)?.name ?? '';
         const user: User = {
           id: crypto.randomUUID(), name: input.name.trim(), email, role: 'CLIENTE', active: true,
-          profile: { photo: '', bio: '', city: 'Não informada', phone: input.phone?.trim(), availability: '', memberSince: new Date().toISOString().slice(0, 10), favoriteModality: 'Beach Tennis', sports: ['Beach Tennis'], level: 'Iniciante', reservationsDone: 0, matchesPlayed: 0, hoursOnCourt: 0, attendanceRate: 100, achievementsUnlocked: 0 }
+          profile: { photo: '', bio: '', city: 'Não informada', phone: input.phone?.trim(), availability: '', memberSince: new Date().toISOString().slice(0, 10), favoriteModality: defaultModality, sports: defaultModality ? [defaultModality] : [], level: 'Iniciante', reservationsDone: 0, matchesPlayed: 0, hoursOnCourt: 0, attendanceRate: 100, achievementsUnlocked: 0 }
         };
-        const preferences: UserPreferences = { theme: 'SYSTEM', notificationsEnabled: true, reservationReminderHours: 2, emailNotifications: true, browserNotifications: true, defaultCity: '', favoriteModalities: ['Beach Tennis'], preferredTimes: '', privateProfile: false, discoverableByPartners: true, language: 'pt-BR' };
+        const preferences: UserPreferences = { theme: 'SYSTEM', notificationsEnabled: true, reservationReminderHours: 2, emailNotifications: true, browserNotifications: true, defaultCity: '', favoriteModalities: defaultModality ? [defaultModality] : [], preferredTimes: '', privateProfile: false, discoverableByPartners: true, language: 'pt-BR' };
         const overrides = JSON.parse(localStorage.getItem(DEMO_PASSWORDS_KEY) || '{}') as Record<string, string>;
         overrides[email] = input.password;
         localStorage.setItem(DEMO_PASSWORDS_KEY, JSON.stringify(overrides));
@@ -1171,8 +1220,13 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         })),
       saveSettings: async (settings) => {
         const token = tokenFromStorage();
-        const saved = dataSource === 'api' && token ? await saveSettingsWithApi(settings, token) : settings;
-        setState((current) => ({ ...current, settings: saved }));
+        const remote = dataSource === 'api' && token ? await saveSettingsWithApi(settings, token) : null;
+        const saved = remote?.settings ?? settings;
+        setState((current) => ({
+          ...current,
+          settings: saved,
+          ...(remote ? { modalityCatalog: remote.modalityCatalog } : {})
+        }));
         return saved;
       },
       finishTour: () => setState((current) => ({ ...current, preferences: { ...current.preferences, tourDone: true } })),

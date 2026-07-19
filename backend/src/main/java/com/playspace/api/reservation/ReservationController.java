@@ -1,6 +1,6 @@
 package com.playspace.api.reservation;
 
-import com.playspace.api.court.Modality;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.security.CurrentUserService;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -22,11 +22,14 @@ public class ReservationController {
     private final ReservationRepository reservations;
     private final ReservationService service;
     private final CurrentUserService currentUser;
+    private final SportModalityService modalities;
 
-    public ReservationController(ReservationRepository reservations, ReservationService service, CurrentUserService currentUser) {
+    public ReservationController(ReservationRepository reservations, ReservationService service,
+            CurrentUserService currentUser, SportModalityService modalities) {
         this.reservations = reservations;
         this.service = service;
         this.currentUser = currentUser;
+        this.modalities = modalities;
     }
 
     @GetMapping
@@ -36,9 +39,10 @@ public class ReservationController {
             @RequestParam(required = false) ReservationStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long courtId,
-            @RequestParam(required = false) Modality modality
+            @RequestParam(required = false) String modality
     ) {
-        return reservations.search(search, status, date, courtId, modality);
+        var normalizedModality = modality == null || modality.isBlank() ? null : modalities.resolveCode(modality);
+        return reservations.search(search, status, date, courtId, normalizedModality);
     }
 
     @GetMapping("/my")

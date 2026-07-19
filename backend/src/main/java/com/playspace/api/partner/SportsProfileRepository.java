@@ -1,6 +1,5 @@
 package com.playspace.api.partner;
 
-import com.playspace.api.court.Modality;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,7 +27,7 @@ public interface SportsProfileRepository extends JpaRepository<SportsProfile, Lo
             @Param("viewerId") Long viewerId,
             @Param("name") String name,
             @Param("city") String city,
-            @Param("modality") Modality modality,
+            @Param("modality") String modality,
             @Param("level") SportsLevel level,
             @Param("objective") PartnerObjective objective,
             Pageable pageable

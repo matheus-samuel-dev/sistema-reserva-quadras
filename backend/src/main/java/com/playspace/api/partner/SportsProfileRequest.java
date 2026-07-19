@@ -1,6 +1,5 @@
 package com.playspace.api.partner;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -14,8 +13,8 @@ import java.util.Set;
 public record SportsProfileRequest(
         @NotBlank @Size(max = 120) String city,
         @Size(max = 10) Set<@NotBlank @Size(max = 120) String> regions,
-        @NotNull Modality primaryModality,
-        @NotEmpty @Size(max = 6) List<@Valid ModalityLevelRequest> modalities,
+        @NotBlank @Size(max = 40) String primaryModality,
+        @NotEmpty @Size(max = 12) List<@Valid ModalityLevelRequest> modalities,
         @Size(max = 21) List<@Valid AvailabilityRequest> availabilities,
         @NotNull PartnerObjective objective,
         @NotBlank @Size(max = 1200) String presentation,
@@ -23,7 +22,7 @@ public record SportsProfileRequest(
         boolean discoverable,
         @Size(max = 500) String avatarUrl
 ) {
-    public record ModalityLevelRequest(@NotNull Modality modality, @NotNull SportsLevel level) {}
+    public record ModalityLevelRequest(@NotBlank @Size(max = 40) String modality, @NotNull SportsLevel level) {}
 
     public record AvailabilityRequest(
             @NotNull DayOfWeek dayOfWeek,

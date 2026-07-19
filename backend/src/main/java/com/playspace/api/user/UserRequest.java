@@ -1,6 +1,5 @@
 package com.playspace.api.user;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,7 +14,7 @@ public record UserRequest(
         boolean active,
         @Size(max = 120) String city,
         @Size(max = 255) String bio,
-        Modality favoriteModality,
+        @Size(max = 40) String favoriteModality,
         @Size(max = 40) String sportsLevel,
         @Size(max = 255) String avatarUrl,
         @Size(max = 30) String phone,

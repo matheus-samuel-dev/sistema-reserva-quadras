@@ -2,7 +2,7 @@ package com.playspace.api.community;
 
 import com.playspace.api.common.NotFoundException;
 import com.playspace.api.security.CurrentUserService;
-import com.playspace.api.court.Modality;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.reservation.ReservationRepository;
 import com.playspace.api.reservation.ReservationStatus;
 import com.playspace.api.user.UserRepository;
@@ -30,6 +30,7 @@ public class CommunityController {
     private final UserRepository users;
     private final CurrentUserService currentUser;
     private final ReservationRepository reservations;
+    private final SportModalityService modalities;
 
     public CommunityController(
             PartnerAdRepository partnerAds,
@@ -39,7 +40,8 @@ public class CommunityController {
             ReviewService reviewService,
             UserRepository users,
             CurrentUserService currentUser,
-            ReservationRepository reservations
+            ReservationRepository reservations,
+            SportModalityService modalities
     ) {
         this.partnerAds = partnerAds;
         this.championships = championships;
@@ -49,6 +51,7 @@ public class CommunityController {
         this.users = users;
         this.currentUser = currentUser;
         this.reservations = reservations;
+        this.modalities = modalities;
     }
 
     @GetMapping("/partners")
@@ -94,8 +97,9 @@ public class CommunityController {
     @GetMapping("/ranking")
     List<RankingResponse> ranking(
             @RequestParam(defaultValue = "MONTHLY") String period,
-            @RequestParam(required = false) Modality modality
+            @RequestParam(required = false) String modality
     ) {
+        var normalizedModality = modality == null || modality.isBlank() ? null : modalities.resolveCode(modality);
         var today = LocalDate.now();
         var start = switch (period.toUpperCase()) {
             case "WEEKLY" -> today.minusDays(6);
@@ -105,7 +109,7 @@ public class CommunityController {
         var eligibleReservations = reservations.findAll().stream()
                 .filter(item -> !item.getDate().isBefore(start) && !item.getDate().isAfter(today))
                 .filter(item -> item.getStatus() != ReservationStatus.CANCELADA && item.getStatus() != ReservationStatus.PENDENTE)
-                .filter(item -> modality == null || item.getModality() == modality)
+                .filter(item -> normalizedModality == null || item.getModality().equals(normalizedModality))
                 .toList();
         return users.findAll().stream()
                 .filter(user -> user.getRole().name().equals("CLIENTE"))
@@ -129,6 +133,7 @@ public class CommunityController {
     @PostMapping("/championships")
     @PreAuthorize("hasRole('ADMIN')")
     ChampionshipResponse createChampionship(@RequestBody Championship championship) {
+        championship.setModality(modalities.requireActive(championship.getModality()).getCode());
         return ChampionshipResponse.from(championships.save(championship));
     }
 }

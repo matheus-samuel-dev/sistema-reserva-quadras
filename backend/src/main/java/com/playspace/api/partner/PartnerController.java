@@ -1,6 +1,5 @@
 package com.playspace.api.partner;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -47,7 +46,7 @@ public class PartnerController {
     Page<SportsProfileResponse> search(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String city,
-            @RequestParam(required = false) Modality modality,
+            @RequestParam(required = false) String modality,
             @RequestParam(required = false) SportsLevel level,
             @RequestParam(required = false) PartnerObjective objective,
             @RequestParam(defaultValue = "0") @Min(0) int page,

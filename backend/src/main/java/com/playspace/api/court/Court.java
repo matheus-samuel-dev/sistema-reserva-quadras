@@ -28,10 +28,9 @@ public class Court extends AuditableEntity {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Enumerated(EnumType.STRING)
     @NotNull
-    @Column(nullable = false)
-    private Modality modality;
+    @Column(nullable = false, length = 40)
+    private String modality;
 
     @Size(max = 1200)
     @Column(length = 1200)
@@ -78,11 +77,11 @@ public class Court extends AuditableEntity {
         this.name = name;
     }
 
-    public Modality getModality() {
+    public String getModality() {
         return modality;
     }
 
-    public void setModality(Modality modality) {
+    public void setModality(String modality) {
         this.modality = modality;
     }
 

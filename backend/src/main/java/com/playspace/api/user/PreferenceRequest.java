@@ -1,6 +1,5 @@
 package com.playspace.api.user;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -15,7 +14,7 @@ public record PreferenceRequest(
         boolean emailNotifications,
         boolean browserNotifications,
         @Size(max = 120) String defaultCity,
-        @Size(max = 6) Set<Modality> favoriteModalities,
+        @Size(max = 12) Set<@NotBlank @Size(max = 40) String> favoriteModalities,
         @Size(max = 1000) String preferredTimes,
         boolean privateProfile,
         boolean discoverableByPartners,

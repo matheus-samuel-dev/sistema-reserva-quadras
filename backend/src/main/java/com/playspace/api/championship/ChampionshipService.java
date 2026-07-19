@@ -5,6 +5,7 @@ import com.playspace.api.common.BusinessException;
 import com.playspace.api.common.ConflictException;
 import com.playspace.api.common.NotFoundException;
 import com.playspace.api.court.CourtRepository;
+import com.playspace.api.modality.SportModalityService;
 import com.playspace.api.notification.NotificationService;
 import com.playspace.api.security.CurrentUserService;
 import com.playspace.api.user.AppUser;
@@ -37,6 +38,7 @@ public class ChampionshipService {
     private final CurrentUserService currentUser;
     private final NotificationService notifications;
     private final AuditService audit;
+    private final SportModalityService modalities;
 
     public ChampionshipService(
             ChampionshipRepository championships,
@@ -44,7 +46,8 @@ public class ChampionshipService {
             CourtRepository courts,
             CurrentUserService currentUser,
             NotificationService notifications,
-            AuditService audit
+            AuditService audit,
+            SportModalityService modalities
     ) {
         this.championships = championships;
         this.enrollments = enrollments;
@@ -52,11 +55,12 @@ public class ChampionshipService {
         this.currentUser = currentUser;
         this.notifications = notifications;
         this.audit = audit;
+        this.modalities = modalities;
     }
 
     @Transactional(readOnly = true)
     public Page<ChampionshipResponse> list(
-            com.playspace.api.court.Modality modality,
+            String modality,
             ChampionshipStatus status,
             String city,
             LocalDate fromDate,
@@ -64,7 +68,8 @@ public class ChampionshipService {
     ) {
         var user = currentUser.user();
         var normalizedCity = city == null || city.isBlank() ? null : city.strip();
-        return championships.search(modality, status, normalizedCity, fromDate, user.getRole() == Role.ADMIN, pageable)
+        var normalizedModality = modality == null || modality.isBlank() ? null : modalities.resolveCode(modality);
+        return championships.search(normalizedModality, status, normalizedCity, fromDate, user.getRole() == Role.ADMIN, pageable)
                 .map(item -> response(item, user));
     }
 
@@ -209,7 +214,8 @@ public class ChampionshipService {
         }
         var court = courts.findById(request.courtId())
                 .orElseThrow(() -> new NotFoundException("Quadra não encontrada."));
-        if (court.getModality() != request.modality()) {
+        var modality = modalities.requireActive(request.modality()).getCode();
+        if (!court.getModality().equals(modality)) {
             throw new BusinessException("A modalidade da quadra deve ser a mesma do campeonato.");
         }
     }
@@ -217,7 +223,7 @@ public class ChampionshipService {
     private void apply(ChampionshipEvent target, ChampionshipRequest request) {
         target.setName(request.name().strip());
         target.setDescription(request.description().strip());
-        target.setModality(request.modality());
+        target.setModality(modalities.requireActive(request.modality()).getCode());
         target.setCourt(courts.findById(request.courtId())
                 .orElseThrow(() -> new NotFoundException("Quadra não encontrada.")));
         target.setLocation(request.location().strip());

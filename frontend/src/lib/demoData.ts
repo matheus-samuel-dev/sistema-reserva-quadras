@@ -258,6 +258,7 @@ const reservationSeeds = [
   ['u-bia', 'c-tennis', 6, '12:00', '13:00', 2, 'Confirmada', 'Cartão de Débito'],
   ['u-cliente', 'c-aurora', -2, '18:00', '19:00', 4, 'Concluída', 'PIX'],
   ['u-cliente', 'c-summit', -5, '20:00', '22:00', 10, 'Concluída', 'Cartão de Crédito'],
+  ['u-bia', 'c-volei', -4, '18:00', '19:00', 10, 'Concluída', 'PIX'],
   ['u-carlos', 'c-pulse', -1, '17:00', '18:00', 4, 'Cancelada', 'PIX'],
   ['u-joao', 'c-neon', -3, '21:00', '22:00', 6, 'Concluída', 'Cartão de Débito'],
   ['u-lucas', 'c-summit', 2, '08:00', '10:00', 12, 'Confirmada', 'Cartão de Crédito'],
@@ -451,6 +452,15 @@ export const ranking = users
   }))
   .sort((a, b) => b.hours - a.hours);
 
+export const modalityCatalog: PlaySpaceState['modalityCatalog'] = [
+  { code: 'BEACH_TENNIS', name: 'Beach Tennis', active: true, defaultPrice: 120 },
+  { code: 'FUTEVOLEI', name: 'Futevôlei', active: true, defaultPrice: 110 },
+  { code: 'SOCIETY', name: 'Society', active: true, defaultPrice: 180 },
+  { code: 'TENIS', name: 'Tênis', active: true, defaultPrice: 115 },
+  { code: 'VOLEI', name: 'Vôlei', active: true, defaultPrice: 95 },
+  { code: 'BASQUETE', name: 'Basquete', active: true, defaultPrice: 90 }
+];
+
 export const settings: Settings = {
   company: 'PlaySpace Club',
   legalName: 'PlaySpace Gestão Esportiva Ltda.',
@@ -507,6 +517,7 @@ export const userPreferences: PlaySpaceState['userPreferences'] = Object.fromEnt
 );
 
 export const initialState: PlaySpaceState = {
+  modalityCatalog,
   users,
   courts,
   reservations,

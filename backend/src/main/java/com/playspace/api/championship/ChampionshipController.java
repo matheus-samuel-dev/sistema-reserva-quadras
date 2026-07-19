@@ -1,6 +1,5 @@
 package com.playspace.api.championship;
 
-import com.playspace.api.court.Modality;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -35,7 +34,7 @@ public class ChampionshipController {
 
     @GetMapping
     Page<ChampionshipResponse> list(
-            @RequestParam(required = false) Modality modality,
+            @RequestParam(required = false) String modality,
             @RequestParam(required = false) ChampionshipStatus status,
             @RequestParam(required = false) String city,
             @RequestParam(required = false) LocalDate fromDate,

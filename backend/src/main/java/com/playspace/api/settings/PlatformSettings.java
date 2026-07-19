@@ -7,7 +7,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.LocalTime;
 
 @Entity
@@ -30,13 +29,6 @@ public class PlatformSettings extends AuditableEntity {
     @Column(nullable = false) private int minimumReservationMinutes;
     @Column(nullable = false) private int maximumAdvanceDays;
     @Column(nullable = false) private int slotMinutes;
-    @Column(nullable = false, length = 200) private String enabledModalities;
-    @Column(nullable = false, precision = 10, scale = 2) private BigDecimal beachTennisPrice;
-    @Column(nullable = false, precision = 10, scale = 2) private BigDecimal futevoleiPrice;
-    @Column(nullable = false, precision = 10, scale = 2) private BigDecimal societyPrice;
-    @Column(nullable = false, precision = 10, scale = 2) private BigDecimal tenisPrice;
-    @Column(nullable = false, precision = 10, scale = 2) private BigDecimal voleiPrice;
-    @Column(nullable = false, precision = 10, scale = 2) private BigDecimal basquetePrice;
     @Column(nullable = false) private boolean acceptPix;
     @Column(nullable = false) private boolean acceptCard;
     @Column(nullable = false) private boolean acceptCash;
@@ -81,20 +73,6 @@ public class PlatformSettings extends AuditableEntity {
     public void setMaximumAdvanceDays(int maximumAdvanceDays) { this.maximumAdvanceDays = maximumAdvanceDays; }
     public int getSlotMinutes() { return slotMinutes; }
     public void setSlotMinutes(int slotMinutes) { this.slotMinutes = slotMinutes; }
-    public String getEnabledModalities() { return enabledModalities; }
-    public void setEnabledModalities(String enabledModalities) { this.enabledModalities = enabledModalities; }
-    public BigDecimal getBeachTennisPrice() { return beachTennisPrice; }
-    public void setBeachTennisPrice(BigDecimal value) { this.beachTennisPrice = value; }
-    public BigDecimal getFutevoleiPrice() { return futevoleiPrice; }
-    public void setFutevoleiPrice(BigDecimal value) { this.futevoleiPrice = value; }
-    public BigDecimal getSocietyPrice() { return societyPrice; }
-    public void setSocietyPrice(BigDecimal value) { this.societyPrice = value; }
-    public BigDecimal getTenisPrice() { return tenisPrice; }
-    public void setTenisPrice(BigDecimal value) { this.tenisPrice = value; }
-    public BigDecimal getVoleiPrice() { return voleiPrice; }
-    public void setVoleiPrice(BigDecimal value) { this.voleiPrice = value; }
-    public BigDecimal getBasquetePrice() { return basquetePrice; }
-    public void setBasquetePrice(BigDecimal value) { this.basquetePrice = value; }
     public boolean isAcceptPix() { return acceptPix; }
     public void setAcceptPix(boolean acceptPix) { this.acceptPix = acceptPix; }
     public boolean isAcceptCard() { return acceptCard; }
